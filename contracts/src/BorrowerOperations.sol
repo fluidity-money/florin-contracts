@@ -967,7 +967,7 @@ contract BorrowerOperations is LiquityBase, AddRemoveManagers, IBorrowerOperatio
             batch.annualInterestRate != _newAnnualInterestRate
                 && block.timestamp < batch.lastInterestRateAdjTime + INTEREST_RATE_ADJ_COOLDOWN
         ) {
-            uint256 price = _requireOraclesLive(false);
+            uint256 price = _requireOraclesLive(true);
 
             uint256 avgInterestRate = activePoolCached.getNewApproxAvgInterestRateFromTroveChange(batchChange);
             batchChange.upfrontFee = _calcUpfrontFee(newDebt, avgInterestRate);
@@ -1163,7 +1163,7 @@ contract BorrowerOperations is LiquityBase, AddRemoveManagers, IBorrowerOperatio
                 vars.batchChange,
                 _maxUpfrontFee,
                 false, // _isTroveInBatch
-                false // _allowStockPaused
+                true // _allowStockPaused
             );
         }
 
@@ -1635,9 +1635,6 @@ contract BorrowerOperations is LiquityBase, AddRemoveManagers, IBorrowerOperatio
 
     function _requireOraclesLive(bool _allowStockPaused) internal returns (uint256) {
         OracleAnswer memory oracleAnswer = priceFeed.fetchPrice();
-        if (oracleAnswer.oracleDown) {
-            revert NewOracleFailureDetected();
-        }
         if (oracleAnswer.stockPaused && !_allowStockPaused) {
             revert StockPaused();
         }
