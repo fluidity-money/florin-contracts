@@ -481,8 +481,7 @@ contract BorrowerOperations is LiquityBase, AddRemoveManagers, IBorrowerOperatio
         // Users can adjust their trove if they're not adding and they're not
         // taking from the collateral:
 
-        bool allowStockPaused = (_isCollIncrease && !_isDebtIncrease)
-            || (!_isCollIncrease && !_isDebtIncrease);
+        bool allowStockPaused = _isCollIncrease && !_isDebtIncrease;
 
         TroveChange memory troveChange;
         _initTroveChange(troveChange, _collChange, _isCollIncrease, _boldChange, _isDebtIncrease);
