@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity 0.8.24;
 
+import {HolidayWord} from "src/PriceFeeds/SPYPriceFeed.sol";
+
 struct MarketHoliday {
     uint8 month;
     uint8 date;
@@ -25,11 +27,6 @@ struct MarketHours {
     uint8 sundayTradingLength;
     bool disableDST;
     MarketHoliday[] marketHolidays;
-}
-
-struct HolidayWord {
-    uint256 key;
-    uint256 value;
 }
 
 function packMarketHours(MarketHours memory hours_) pure returns (uint256 weeklyWord, HolidayWord[] memory holidays) {

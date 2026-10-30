@@ -32,6 +32,7 @@ import "test/Utils/Logging.sol";
 import "test/Utils/StringEquality.sol";
 import "forge-std/console2.sol";
 
+import {packUSMarketHours2027} from "./EncodeMarketHours.s.sol";
 import {DeployGovernance} from "./DeployGovernance.s.sol";
 
 function _latestUTCMidnightBetweenWednesdayAndThursday() view returns (uint256) {
@@ -402,6 +403,8 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
         vars.collaterals = new IERC20Metadata[](vars.numCollaterals);
         vars.addressesRegistries = new IAddressesRegistry[](vars.numCollaterals);
         vars.troveManagers = new ITroveManager[](vars.numCollaterals);
+
+        (vars.stockMarketHoursWord, vars.holidayWords) = packUSMarketHours2027();
 
         // Collaterals
         if (block.chainid == ROBINHOOD_CHAIN && !useTestnetPriceFeeds) {
