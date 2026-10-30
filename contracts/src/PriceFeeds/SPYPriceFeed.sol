@@ -4,7 +4,6 @@ pragma solidity 0.8.24;
 
 import "./RobinhoodPriceFeedBase.sol";
 
-import "../Dependencies/AggregatorV3Interface.sol";
 import "../Dependencies/StockTokenInterface.sol";
 
 // import "forge-std/console2.sol";
@@ -15,21 +14,17 @@ struct HolidayWord {
 }
 
 contract SPYPriceFeed is RobinhoodPriceFeedBase {
-    uint256 constant public SEQUENCER_GRACE_SECS = 24 hours;
-
     uint256 public stockMarketHoursWord;
     mapping(uint => uint256) public holidayWords;
 
     StockTokenInterface public stockToken;
-    AggregatorV3Interface public sequencerUptimeFeed;
 
     constructor(address _ethUsdOracleAddress, address _borrowerOperationsAddress, address _stockToken, address _sequencerUptimeFeed, uint256 _stockMarketHoursWord, HolidayWord[] memory _holidayWords)
-        RobinhoodPriceFeedBase(_ethUsdOracleAddress, _borrowerOperationsAddress)
+        RobinhoodPriceFeedBase(_ethUsdOracleAddress, _borrowerOperationsAddress, _sequencerUptimeFeed)
     {
         require(_holidayWords.length > 0);
 
         stockToken = StockTokenInterface(_stockToken);
-        sequencerUptimeFeed = AggregatorV3Interface(_sequencerUptimeFeed);
 
         _fetchPricePrimary();
 
@@ -125,13 +120,6 @@ contract SPYPriceFeed is RobinhoodPriceFeedBase {
         date = doy - (153 * mp + 2) / 5 + 1;
     }
 
-    function _isSequencerOffline() internal view returns (bool) {
-        (, int256 sequencerStatus, uint256 startedAt, , ) = sequencerUptimeFeed.latestRoundData();
-        bool sequencerDown = sequencerStatus != 0;
-        bool sequencerPastGracePeriod = block.timestamp - startedAt > SEQUENCER_GRACE_SECS;
-        return (sequencerDown && sequencerPastGracePeriod);
-    }
-
     // Is the stock market paused? Returns whether it's either trading
     // outside market hours, or if the token reports its paused.
     function isStockPaused() public view returns (bool) {
@@ -167,13 +155,8 @@ contract SPYPriceFeed is RobinhoodPriceFeedBase {
     // - A bool indicating whether a new oracle failure was detected in the call
     function _fetchPricePrimary() internal returns (uint256, bool) {
         assert(priceSource == PriceSource.primary);
-        uint256 ethUsdPrice;
 
-        bool ethUsdOracleDown = _isSequencerOffline();
-
-        if (!ethUsdOracleDown) {
-            (ethUsdPrice, ethUsdOracleDown) = _getOracleAnswer(ethUsdOracle);
-        }
+        (uint256 ethUsdPrice, bool ethUsdOracleDown) = _getOracleAnswer(ethUsdOracle);
 
         // If the ETH-USD Chainlink response was invalid in this transaction,
         // return the last good ETH-USD price calculated This can only happen if

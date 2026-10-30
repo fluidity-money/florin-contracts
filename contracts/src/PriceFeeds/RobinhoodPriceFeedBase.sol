@@ -8,6 +8,8 @@ import "../BorrowerOperations.sol";
 // import "forge-std/console2.sol";
 
 abstract contract RobinhoodPriceFeedBase is IMainnetPriceFeed {
+    uint256 constant public SEQUENCER_GRACE_SECS = 24 hours;
+
     // Determines where the PriceFeed sources data from. Possible states:
     // - primary: Uses the primary price calculation, which depends on the specific feed
     // - lastGoodPrice: the last good price recorded by this PriceFeed.
@@ -15,6 +17,8 @@ abstract contract RobinhoodPriceFeedBase is IMainnetPriceFeed {
 
     // Last good price tracker for the derived USD price
     uint256 public lastGoodPrice;
+
+    AggregatorV3Interface public sequencerUptimeFeed;
 
     struct Oracle {
         AggregatorV3Interface aggregator;
@@ -35,14 +39,22 @@ abstract contract RobinhoodPriceFeedBase is IMainnetPriceFeed {
 
     IBorrowerOperations borrowerOperations;
 
-    constructor(address _ethUsdOracleAddress, address _borrowOperationsAddress) {
+    constructor(address _ethUsdOracleAddress, address _borrowOperationsAddress, address _sequencerUptimeFeed) {
         // Store ETH-USD oracle
         ethUsdOracle.aggregator = AggregatorV3Interface(_ethUsdOracleAddress);
         ethUsdOracle.decimals = ethUsdOracle.aggregator.decimals();
 
         borrowerOperations = IBorrowerOperations(_borrowOperationsAddress);
+        sequencerUptimeFeed = AggregatorV3Interface(_sequencerUptimeFeed);
 
         assert(ethUsdOracle.decimals == 8);
+    }
+
+    function _isSequencerOffline() internal view returns (bool) {
+        (, int256 sequencerStatus, uint256 startedAt, , ) = sequencerUptimeFeed.latestRoundData();
+        bool sequencerDown = sequencerStatus != 0;
+        bool sequencerPastGracePeriod = block.timestamp - startedAt > SEQUENCER_GRACE_SECS;
+        return (sequencerDown && sequencerPastGracePeriod);
     }
 
     function _getOracleAnswer(Oracle memory _oracle) internal view returns (uint256, bool) {
@@ -50,8 +62,9 @@ abstract contract RobinhoodPriceFeedBase is IMainnetPriceFeed {
 
         uint256 scaledPrice;
         bool oracleIsDown;
+        // Check if the sequencer is operating before consulting the oracle
         // Check oracle is serving an up-to-date and sensible price. If not, shut down this collateral branch.
-        if (!_isValidChainlinkPrice(chainlinkResponse)) {
+        if (_isSequencerOffline() || !_isValidChainlinkPrice(chainlinkResponse)) {
             oracleIsDown = true;
         } else {
             scaledPrice = _scaleChainlinkPriceTo18decimals(chainlinkResponse.answer, _oracle.decimals);
