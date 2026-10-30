@@ -24,7 +24,7 @@ contract LiquidationsLSTTest is DevTestSetup {
 
         TestDeployer deployer = new TestDeployer();
         TestDeployer.LiquityContractsDev memory contracts;
-        (contracts, collateralRegistry, boldToken,,,,) = deployer.deployAndConnectContracts(
+        (contracts, collateralRegistry, boldToken,,,) = deployer.deployAndConnectContracts(
             TestDeployer.TroveManagerParams(160e16, 120e16, 10e16, 120e16, 5e16, 10e16)
         );
         collToken = contracts.collToken;
@@ -96,7 +96,7 @@ contract LiquidationsLSTTest is DevTestSetup {
 
         // Price drops
         priceFeed.setPrice(1200e18 - 1);
-        (uint256 price,) = priceFeed.fetchPrice();
+        (uint256 price,) = priceFeed.fetchPriceNoPauseCheck();
 
         InitialValues memory initialValues;
         initialValues.BDebt = troveManager.getTroveEntireDebt(BTroveId);

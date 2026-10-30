@@ -1,17 +1,15 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BUSL-1.1
 
 pragma solidity 0.8.24;
 
-import "../Dependencies/AggregatorV3Interface.sol";
 import "../Interfaces/IMainnetPriceFeed.sol";
 import "../BorrowerOperations.sol";
 
 // import "forge-std/console2.sol";
 
-abstract contract MainnetPriceFeedBase is IMainnetPriceFeed {
+abstract contract RobinhoodPriceFeedBase is IMainnetPriceFeed {
     // Determines where the PriceFeed sources data from. Possible states:
     // - primary: Uses the primary price calculation, which depends on the specific feed
-    // - ETHUSDxCanonical: Uses Chainlink's ETH-USD multiplied by the LST' canonical rate
     // - lastGoodPrice: the last good price recorded by this PriceFeed.
     PriceSource public priceSource;
 
@@ -20,7 +18,6 @@ abstract contract MainnetPriceFeedBase is IMainnetPriceFeed {
 
     struct Oracle {
         AggregatorV3Interface aggregator;
-        uint256 stalenessThreshold;
         uint8 decimals;
     }
 
@@ -39,10 +36,9 @@ abstract contract MainnetPriceFeedBase is IMainnetPriceFeed {
 
     IBorrowerOperations borrowerOperations;
 
-    constructor(address _ethUsdOracleAddress, uint256 _ethUsdStalenessThreshold, address _borrowOperationsAddress) {
+    constructor(address _ethUsdOracleAddress, address _borrowOperationsAddress) {
         // Store ETH-USD oracle
         ethUsdOracle.aggregator = AggregatorV3Interface(_ethUsdOracleAddress);
-        ethUsdOracle.stalenessThreshold = _ethUsdStalenessThreshold;
         ethUsdOracle.decimals = ethUsdOracle.aggregator.decimals();
 
         borrowerOperations = IBorrowerOperations(_borrowOperationsAddress);
@@ -56,7 +52,7 @@ abstract contract MainnetPriceFeedBase is IMainnetPriceFeed {
         uint256 scaledPrice;
         bool oracleIsDown;
         // Check oracle is serving an up-to-date and sensible price. If not, shut down this collateral branch.
-        if (!_isValidChainlinkPrice(chainlinkResponse, _oracle.stalenessThreshold)) {
+        if (!_isValidChainlinkPrice(chainlinkResponse)) {
             oracleIsDown = true;
         } else {
             scaledPrice = _scaleChainlinkPriceTo18decimals(chainlinkResponse.answer, _oracle.decimals);
@@ -65,13 +61,14 @@ abstract contract MainnetPriceFeedBase is IMainnetPriceFeed {
         return (scaledPrice, oracleIsDown);
     }
 
-    function _shutDownAndSwitchToLastGoodPrice(address _failedOracleAddr) internal returns (uint256) {
+    function _shutDownAndSwitchToLastGoodPriceNoReturn(address _failedOracleAddr) internal returns (uint256) {
         // Shut down the branch
         borrowerOperations.shutdownFromOracleFailure();
 
         priceSource = PriceSource.lastGoodPrice;
 
         emit ShutDownFromOracleFailure(_failedOracleAddr);
+
         return lastGoodPrice;
     }
 
@@ -106,15 +103,13 @@ abstract contract MainnetPriceFeedBase is IMainnetPriceFeed {
 
     // False if:
     // - Call to Chainlink aggregator reverts
-    // - price is too stale, i.e. older than the oracle's staleness threshold
     // - Price answer is 0 or negative
-    function _isValidChainlinkPrice(ChainlinkResponse memory chainlinkResponse, uint256 _stalenessThreshold)
+    function _isValidChainlinkPrice(ChainlinkResponse memory chainlinkResponse)
         internal
         view
         returns (bool)
     {
-        return chainlinkResponse.success && block.timestamp - chainlinkResponse.timestamp < _stalenessThreshold
-            && chainlinkResponse.answer > 0;
+        return chainlinkResponse.success && chainlinkResponse.answer > 0;
     }
 
     // Trust assumption: Chainlink won't change the decimal precision on any feed used in v2 after deployment

@@ -10,6 +10,7 @@ import "./Interfaces/ITroveManager.sol";
 import "./Interfaces/IBoldToken.sol";
 import "./Interfaces/ICollSurplusPool.sol";
 import "./Interfaces/ISortedTroves.sol";
+import "./Interfaces/IPriceFeed.sol";
 import "./Dependencies/LiquityBase.sol";
 import "./Dependencies/AddRemoveManagers.sol";
 import "./Types/LatestTroveData.sol";
@@ -155,6 +156,7 @@ contract BorrowerOperations is LiquityBase, AddRemoveManagers, IBorrowerOperatio
     error MinInterestRateChangePeriodTooLow();
     error NewOracleFailureDetected();
     error BatchSharesRatioTooLow();
+    error StockPaused();
 
     event TroveManagerAddressChanged(address _newTroveManagerAddress);
     event GasPoolAddressChanged(address _gasPoolAddress);
@@ -318,7 +320,7 @@ contract BorrowerOperations is LiquityBase, AddRemoveManagers, IBorrowerOperatio
         vars.activePool = activePool;
         vars.boldToken = boldToken;
 
-        vars.price = _requireOraclesLive();
+        vars.price = _requireOraclesLive(false);
 
         // --- Checks ---
 
@@ -390,7 +392,8 @@ contract BorrowerOperations is LiquityBase, AddRemoveManagers, IBorrowerOperatio
             troveManagerCached,
             _troveId,
             troveChange,
-            0 // _maxUpfrontFee
+            0, // _maxUpfrontFee
+            true // _allowStockPaused
         );
     }
 
@@ -406,7 +409,8 @@ contract BorrowerOperations is LiquityBase, AddRemoveManagers, IBorrowerOperatio
             troveManagerCached,
             _troveId,
             troveChange,
-            0 // _maxUpfrontFee
+            0, // _maxUpfrontFee
+            false // _allowStockPaused
         );
     }
 
@@ -417,7 +421,13 @@ contract BorrowerOperations is LiquityBase, AddRemoveManagers, IBorrowerOperatio
 
         TroveChange memory troveChange;
         troveChange.debtIncrease = _boldAmount;
-        _adjustTrove(troveManagerCached, _troveId, troveChange, _maxUpfrontFee);
+        _adjustTrove(
+            troveManagerCached,
+            _troveId,
+            troveChange,
+            _maxUpfrontFee,
+            false // _allowStockPaused
+        );
     }
 
     // Repay Bold tokens to a Trove: Burn the repaid Bold tokens, and reduce the trove's debt accordingly
@@ -432,7 +442,8 @@ contract BorrowerOperations is LiquityBase, AddRemoveManagers, IBorrowerOperatio
             troveManagerCached,
             _troveId,
             troveChange,
-            0 // _maxUpfrontFee
+            0, // _maxUpfrontFee
+            true // _allowStockPaused
         );
     }
 
@@ -467,9 +478,17 @@ contract BorrowerOperations is LiquityBase, AddRemoveManagers, IBorrowerOperatio
         ITroveManager troveManagerCached = troveManager;
         _requireTroveIsActive(troveManagerCached, _troveId);
 
+        bool allowStockPaused = _isCollIncrease && !_isDebtIncrease;
+
         TroveChange memory troveChange;
         _initTroveChange(troveChange, _collChange, _isCollIncrease, _boldChange, _isDebtIncrease);
-        _adjustTrove(troveManagerCached, _troveId, troveChange, _maxUpfrontFee);
+        _adjustTrove(
+            troveManagerCached,
+            _troveId,
+            troveChange,
+            _maxUpfrontFee,
+            allowStockPaused
+        );
     }
 
     function adjustZombieTrove(
@@ -487,7 +506,13 @@ contract BorrowerOperations is LiquityBase, AddRemoveManagers, IBorrowerOperatio
 
         TroveChange memory troveChange;
         _initTroveChange(troveChange, _collChange, _isCollIncrease, _boldChange, _isDebtIncrease);
-        _adjustTrove(troveManagerCached, _troveId, troveChange, _maxUpfrontFee);
+        _adjustTrove(
+            troveManagerCached,
+            _troveId,
+            troveChange,
+            _maxUpfrontFee,
+            false // _allowStockPaused
+        );
 
         troveManagerCached.setTroveStatusToActive(_troveId);
 
@@ -537,7 +562,14 @@ contract BorrowerOperations is LiquityBase, AddRemoveManagers, IBorrowerOperatio
 
         // Apply upfront fee on premature adjustments. It checks the resulting ICR
         if (block.timestamp < trove.lastInterestRateAdjTime + INTEREST_RATE_ADJ_COOLDOWN) {
-            newDebt = _applyUpfrontFee(trove.entireColl, newDebt, troveChange, _maxUpfrontFee, false);
+            newDebt = _applyUpfrontFee(
+                trove.entireColl,
+                newDebt,
+                troveChange,
+                _maxUpfrontFee,
+                false, // _isTroveInBatch
+                true // _allowStockPaused
+            );
         }
 
         // Recalculate newWeightedRecordedDebt, now taking into account the upfront fee
@@ -558,7 +590,8 @@ contract BorrowerOperations is LiquityBase, AddRemoveManagers, IBorrowerOperatio
         ITroveManager _troveManager,
         uint256 _troveId,
         TroveChange memory _troveChange,
-        uint256 _maxUpfrontFee
+        uint256 _maxUpfrontFee,
+        bool _allowStockPaused
     ) internal {
         _requireIsNotShutDown();
 
@@ -566,7 +599,7 @@ contract BorrowerOperations is LiquityBase, AddRemoveManagers, IBorrowerOperatio
         vars.activePool = activePool;
         vars.boldToken = boldToken;
 
-        vars.price = _requireOraclesLive();
+        vars.price = _requireOraclesLive(_allowStockPaused);
         vars.isBelowCriticalThreshold = _checkBelowCriticalThreshold(vars.price, CCR);
 
         // --- Checks ---
@@ -717,8 +750,8 @@ contract BorrowerOperations is LiquityBase, AddRemoveManagers, IBorrowerOperatio
             // troveChange.newWeightedRecordedDebt = 0;
         }
 
-        (uint256 price,) = priceFeed.fetchPrice();
-        uint256 newTCR = _getNewTCRFromTroveChange(troveChange, price);
+        OracleAnswer memory oracleAnswer = priceFeed.fetchPrice();
+        uint256 newTCR = _getNewTCRFromTroveChange(troveChange, oracleAnswer.lastGoodPrice);
         if (!hasBeenShutDown) _requireNewTCRisAboveCCR(newTCR);
 
         troveManagerCached.onCloseTrove(
@@ -934,7 +967,7 @@ contract BorrowerOperations is LiquityBase, AddRemoveManagers, IBorrowerOperatio
             batch.annualInterestRate != _newAnnualInterestRate
                 && block.timestamp < batch.lastInterestRateAdjTime + INTEREST_RATE_ADJ_COOLDOWN
         ) {
-            uint256 price = _requireOraclesLive();
+            uint256 price = _requireOraclesLive(false);
 
             uint256 avgInterestRate = activePoolCached.getNewApproxAvgInterestRateFromTroveChange(batchChange);
             batchChange.upfrontFee = _calcUpfrontFee(newDebt, avgInterestRate);
@@ -1002,7 +1035,14 @@ contract BorrowerOperations is LiquityBase, AddRemoveManagers, IBorrowerOperatio
         // and gain free interest rate updates (e.g. if they also manage the batch they joined)
         // It checks the resulting ICR
         vars.trove.entireDebt =
-            _applyUpfrontFee(vars.trove.entireColl, vars.trove.entireDebt, newBatchTroveChange, _maxUpfrontFee, true);
+            _applyUpfrontFee(
+                vars.trove.entireColl,
+                vars.trove.entireDebt,
+                newBatchTroveChange,
+                _maxUpfrontFee,
+                true, // _isTroveInBatch
+                false // _allowStockPaused
+            );
 
         // Recalculate newWeightedRecordedDebt, now taking into account the upfront fee
         newBatchTroveChange.newWeightedRecordedDebt =
@@ -1117,8 +1157,14 @@ contract BorrowerOperations is LiquityBase, AddRemoveManagers, IBorrowerOperatio
             vars.batch.annualInterestRate != _newAnnualInterestRate
                 && block.timestamp < vars.trove.lastInterestRateAdjTime + INTEREST_RATE_ADJ_COOLDOWN
         ) {
-            vars.trove.entireDebt =
-                _applyUpfrontFee(vars.trove.entireColl, vars.trove.entireDebt, vars.batchChange, _maxUpfrontFee, false);
+            vars.trove.entireDebt = _applyUpfrontFee(
+                vars.trove.entireColl,
+                vars.trove.entireDebt,
+                vars.batchChange,
+                _maxUpfrontFee,
+                false, // _isTroveInBatch
+                false // _allowStockPaused
+            );
         }
 
         // Recalculate newWeightedRecordedDebt, now taking into account the upfront fee
@@ -1165,9 +1211,10 @@ contract BorrowerOperations is LiquityBase, AddRemoveManagers, IBorrowerOperatio
         uint256 _troveEntireDebt,
         TroveChange memory _troveChange,
         uint256 _maxUpfrontFee,
-        bool _isTroveInBatch
+        bool _isTroveInBatch,
+        bool _allowStockPaused
     ) internal returns (uint256) {
-        uint256 price = _requireOraclesLive();
+        uint256 price = _requireOraclesLive(_allowStockPaused);
 
         uint256 avgInterestRate = activePool.getNewApproxAvgInterestRateFromTroveChange(_troveChange);
         _troveChange.upfrontFee = _calcUpfrontFee(_troveEntireDebt, avgInterestRate);
@@ -1221,12 +1268,12 @@ contract BorrowerOperations is LiquityBase, AddRemoveManagers, IBorrowerOperatio
 
         uint256 totalColl = getEntireBranchColl();
         uint256 totalDebt = getEntireBranchDebt();
-        (uint256 price, bool newOracleFailureDetected) = priceFeed.fetchPrice();
+        OracleAnswer memory oracleAnswer = priceFeed.fetchPrice();
         // If the oracle failed, the above call to PriceFeed will have shut this branch down
-        if (newOracleFailureDetected) return;
+        if (oracleAnswer.oracleDown) return;
 
         // Otherwise, proceed with the TCR check:
-        uint256 TCR = LiquityMath._computeCR(totalColl, totalDebt, price);
+        uint256 TCR = LiquityMath._computeCR(totalColl, totalDebt, oracleAnswer.lastGoodPrice);
         if (TCR >= SCR) revert TCRNotBelowSCR();
 
         _applyShutdown();
@@ -1586,13 +1633,16 @@ contract BorrowerOperations is LiquityBase, AddRemoveManagers, IBorrowerOperatio
         }
     }
 
-    function _requireOraclesLive() internal returns (uint256) {
-        (uint256 price, bool newOracleFailureDetected) = priceFeed.fetchPrice();
-        if (newOracleFailureDetected) {
+    function _requireOraclesLive(bool _allowStockPaused) internal returns (uint256) {
+        OracleAnswer memory oracleAnswer = priceFeed.fetchPrice();
+        if (oracleAnswer.oracleDown) {
             revert NewOracleFailureDetected();
         }
+        if (oracleAnswer.stockPaused && !_allowStockPaused) {
+            revert StockPaused();
+        }
 
-        return price;
+        return oracleAnswer.lastGoodPrice;
     }
 
     // --- ICR and TCR getters ---

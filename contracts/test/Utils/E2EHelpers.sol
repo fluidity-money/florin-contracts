@@ -7,8 +7,6 @@ import {IERC20Metadata as IERC20} from "openzeppelin-contracts/contracts/token/E
 import {Math} from "openzeppelin-contracts/contracts/utils/math/Math.sol";
 
 import {Governance} from "V2-gov/src/Governance.sol";
-import {ILeverageZapper} from "src/Zappers/Interfaces/ILeverageZapper.sol";
-import {IZapper} from "src/Zappers/Interfaces/IZapper.sol";
 import {IPriceFeed} from "src/Interfaces/IPriceFeed.sol";
 import {IBorrowerOperationsV1} from "../Interfaces/LiquityV1/IBorrowerOperationsV1.sol";
 import {IPriceFeedV1} from "../Interfaces/LiquityV1/IPriceFeedV1.sol";
@@ -20,13 +18,10 @@ import {StringEquality} from "./StringEquality.sol";
 import {UseDeployment} from "./UseDeployment.sol";
 import {TroveId} from "./TroveId.sol";
 
-uint256 constant PRICE_TOLERANCE = 0.05 ether;
-
 address constant ETH_WHALE = 0x70997970C51812dc3A010C7d01b50e0d17dc79C8; // Anvil account #1
 address constant WETH_WHALE = 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC; // Anvil account #2
 address constant WSTETH_WHALE = 0xd85351181b3F264ee0FDFa94518464d7c3DefaDa;
 address constant RETH_WHALE = 0xE76af4a9A3E71681F4C9BE600A0BA8D9d249175b;
-address constant USDC_WHALE = 0x37305B1cD40574E4C5Ce33f8e8306Be057fD7341;
 address constant LQTY_WHALE = 0xA78f19D7f331247212C6d9C0F27D3d9464D3604D;
 address constant LUSD_WHALE = 0xcd6Eb888e76450eF584E8B51bB73c76ffBa21FF2;
 
@@ -44,7 +39,7 @@ contract SideEffectFreeGetPriceHelper {
     }
 
     function throwPrice(IPriceFeed priceFeed) external {
-        (uint256 price,) = priceFeed.fetchPrice();
+        (uint256 price,) = priceFeed.fetchPriceNoPauseCheck();
         _revert(abi.encode(price));
     }
 
@@ -111,14 +106,12 @@ contract E2EHelpers is Test, UseDeployment, TroveId {
         vm.label(WETH_WHALE, "WETH_WHALE");
         vm.label(WSTETH_WHALE, "WSTETH_WHALE");
         vm.label(RETH_WHALE, "RETH_WHALE");
-        vm.label(USDC_WHALE, "USDC_WHALE");
         vm.label(LQTY_WHALE, "LQTY_WHALE");
         vm.label(LUSD_WHALE, "LUSD_WHALE");
 
         providerOf[WETH] = WETH_WHALE;
         providerOf[WSTETH] = WSTETH_WHALE;
         providerOf[RETH] = RETH_WHALE;
-        providerOf[USDC] = USDC_WHALE;
         providerOf[LQTY] = LQTY_WHALE;
         providerOf[LUSD] = LUSD_WHALE;
 
@@ -127,7 +120,7 @@ contract E2EHelpers is Test, UseDeployment, TroveId {
 
         // Testnet
         if (block.chainid != 1) {
-            address[5] memory coins = [WSTETH, RETH, USDC, LQTY, LUSD];
+            address[4] memory coins = [WSTETH, RETH, LQTY, LUSD];
 
             for (uint256 i = 0; i < coins.length; ++i) {
                 ERC20Faucet faucet = ERC20Faucet(coins[i]);
@@ -167,121 +160,40 @@ contract E2EHelpers is Test, UseDeployment, TroveId {
     }
 
     function _openTrove(uint256 i, address owner, uint256 ownerIndex, uint256 boldAmount) internal returns (uint256) {
-        IZapper.OpenTroveParams memory p;
-        p.owner = owner;
-        p.ownerIndex = ownerIndex;
-        p.boldAmount = boldAmount;
-        p.collAmount = boldAmount * 2 ether / branches[i].priceFeed.getPrice();
-        p.annualInterestRate = 0.05 ether;
-        p.maxUpfrontFee = hintHelpers.predictOpenTroveUpfrontFee(i, boldAmount, p.annualInterestRate);
+        uint256 collAmount = boldAmount * 2 ether / branches[i].priceFeed.getPrice();
+        uint256 annualInterestRate = 0.05 ether;
+        uint256 maxUpfrontFee = hintHelpers.predictOpenTroveUpfrontFee(i, boldAmount, annualInterestRate);
+        address borrowerOperations = address(branches[i].borrowerOperations);
 
-        (uint256 collTokenAmount, uint256 value) = branches[i].collToken == weth
-            ? (0, p.collAmount + ETH_GAS_COMPENSATION)
-            : (p.collAmount, ETH_GAS_COMPENSATION);
-
-        deal(owner, value);
+        uint256 collTokenAmount =
+            address(branches[i].collToken) == address(weth) ? collAmount + ETH_GAS_COMPENSATION : collAmount;
         deal(address(branches[i].collToken), owner, collTokenAmount);
-
-        vm.startPrank(owner);
-        branches[i].collToken.approve(address(branches[i].zapper), collTokenAmount);
-        branches[i].zapper.openTroveWithRawETH{value: value}(p);
-        vm.stopPrank();
-
-        return boldAmount;
-    }
-
-    function _closeTroveFromCollateral(uint256 i, address owner, uint256 ownerIndex, bool _leveraged)
-        internal
-        returns (uint256)
-    {
-        IZapper zapper;
-        if (_leveraged) {
-            zapper = branches[i].leverageZapper;
-        } else {
-            zapper = branches[i].zapper;
+        if (address(branches[i].collToken) != address(weth)) {
+            deal(address(weth), owner, ETH_GAS_COMPENSATION);
         }
-        uint256 troveId = addressToTroveIdThroughZapper(address(zapper), owner, ownerIndex);
-        uint256 debt = branches[i].troveManager.getLatestTroveData(troveId).entireDebt;
-        uint256 coll = branches[i].troveManager.getLatestTroveData(troveId).entireColl;
-        uint256 flashLoanAmount = debt * (1 ether + PRICE_TOLERANCE) / branches[i].priceFeed.getPrice();
 
         vm.startPrank(owner);
-        zapper.closeTroveFromCollateral({
-            _troveId: troveId,
-            _flashLoanAmount: flashLoanAmount,
-            _minExpectedCollateral: coll - flashLoanAmount
-        });
-        vm.stopPrank();
-
-        return debt;
-    }
-
-    function _openLeveragedTrove(uint256 i, address owner, uint256 ownerIndex, uint256 boldAmount)
-        internal
-        returns (uint256)
-    {
-        uint256 price = branches[i].priceFeed.getPrice();
-
-        ILeverageZapper.OpenLeveragedTroveParams memory p;
-        p.owner = owner;
-        p.ownerIndex = ownerIndex;
-        p.boldAmount = boldAmount;
-        p.collAmount = boldAmount * 0.5 ether / price;
-        p.flashLoanAmount = boldAmount * (1 ether - PRICE_TOLERANCE) / price;
-        p.annualInterestRate = 0.1 ether;
-        p.maxUpfrontFee = hintHelpers.predictOpenTroveUpfrontFee(i, boldAmount, p.annualInterestRate);
-
-        (uint256 collTokenAmount, uint256 value) = branches[i].collToken == weth
-            ? (0, p.collAmount + ETH_GAS_COMPENSATION)
-            : (p.collAmount, ETH_GAS_COMPENSATION);
-
-        deal(owner, value);
-        deal(address(branches[i].collToken), owner, collTokenAmount);
-
-        vm.startPrank(owner);
-        branches[i].collToken.approve(address(branches[i].leverageZapper), collTokenAmount);
-        branches[i].leverageZapper.openLeveragedTroveWithRawETH{value: value}(p);
+        branches[i].collToken.approve(borrowerOperations, collTokenAmount);
+        if (address(branches[i].collToken) != address(weth)) {
+            weth.approve(borrowerOperations, ETH_GAS_COMPENSATION);
+        }
+        branches[i].borrowerOperations
+            .openTrove(
+                owner,
+                ownerIndex,
+                collAmount,
+                boldAmount,
+                0,
+                0,
+                annualInterestRate,
+                maxUpfrontFee,
+                address(0),
+                address(0),
+                address(0)
+            );
         vm.stopPrank();
 
         return boldAmount;
-    }
-
-    function _leverUpTrove(uint256 i, address owner, uint256 ownerIndex, uint256 boldAmount)
-        internal
-        returns (uint256)
-    {
-        uint256 troveId = addressToTroveIdThroughZapper(address(branches[i].leverageZapper), owner, ownerIndex);
-
-        ILeverageZapper.LeverUpTroveParams memory p = ILeverageZapper.LeverUpTroveParams({
-            troveId: troveId,
-            boldAmount: boldAmount,
-            flashLoanAmount: boldAmount * (1 ether - PRICE_TOLERANCE) / branches[i].priceFeed.getPrice(),
-            maxUpfrontFee: hintHelpers.predictAdjustTroveUpfrontFee(i, troveId, boldAmount)
-        });
-
-        vm.prank(owner);
-        branches[i].leverageZapper.leverUpTrove(p);
-
-        return boldAmount;
-    }
-
-    function _leverDownTrove(uint256 i, address owner, uint256 ownerIndex, uint256 boldAmount)
-        internal
-        returns (uint256)
-    {
-        uint256 troveId = addressToTroveIdThroughZapper(address(branches[i].leverageZapper), owner, ownerIndex);
-        uint256 debtBefore = branches[i].troveManager.getLatestTroveData(troveId).entireDebt;
-
-        ILeverageZapper.LeverDownTroveParams memory p = ILeverageZapper.LeverDownTroveParams({
-            troveId: troveId,
-            minBoldAmount: boldAmount,
-            flashLoanAmount: boldAmount * (1 ether + PRICE_TOLERANCE) / branches[i].priceFeed.getPrice()
-        });
-
-        vm.prank(owner);
-        branches[i].leverageZapper.leverDownTrove(p);
-
-        return debtBefore - branches[i].troveManager.getLatestTroveData(troveId).entireDebt;
     }
 
     function _provideToSP(uint256 i, address depositor, uint256 boldAmount) internal {

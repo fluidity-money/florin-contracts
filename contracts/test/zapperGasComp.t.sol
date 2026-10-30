@@ -7,6 +7,8 @@ import "./TestContracts/WETH.sol";
 import "src/Zappers/GasCompZapper.sol";
 
 contract ZapperGasCompTest is DevTestSetup {
+    GasCompZapper gasCompZapper;
+
     function setUp() public override {
         // Start tests at a non-zero timestamp
         vm.warp(block.timestamp + 600);
@@ -32,9 +34,7 @@ contract ZapperGasCompTest is DevTestSetup {
 
         TestDeployer deployer = new TestDeployer();
         TestDeployer.LiquityContractsDev[] memory contractsArray;
-        TestDeployer.Zappers[] memory zappersArray;
-        (contractsArray, collateralRegistry, boldToken,,, zappersArray) =
-            deployer.deployAndConnectContracts(troveManagerParams, WETH);
+        (contractsArray, collateralRegistry, boldToken,,) = deployer.deployAndConnectContracts(troveManagerParams, WETH);
 
         // Set price feeds
         contractsArray[1].priceFeed.setPrice(2000e18);
@@ -45,7 +45,8 @@ contract ZapperGasCompTest is DevTestSetup {
         troveManager = contractsArray[1].troveManager;
         troveNFT = contractsArray[1].troveNFT;
         collToken = contractsArray[1].collToken;
-        gasCompZapper = zappersArray[1].gasCompZapper;
+        // These unit tests exercise direct trove operations, not swaps or flash loans.
+        gasCompZapper = new GasCompZapper(addressesRegistry, IFlashLoanProvider(address(0)), IExchange(address(0)));
 
         // Give some Collateral to test accounts
         uint256 initialCollateralAmount = 10_000e18;

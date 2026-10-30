@@ -52,7 +52,7 @@ contract RedemptionHelperTest is DevTestSetup {
 
         TestDeployer.LiquityContractsDev[] memory tmpBranch;
         TestDeployer deployer = new TestDeployer();
-        (tmpBranch, collateralRegistry, boldToken, hintHelpers,, WETH,) =
+        (tmpBranch, collateralRegistry, boldToken, hintHelpers,, WETH) =
             deployer.deployAndConnectContractsMultiColl(params);
 
         for (uint256 i = 0; i < tmpBranch.length; ++i) {

@@ -6,11 +6,7 @@ import {stdJson} from "forge-std/StdJson.sol";
 import {IERC20Metadata as IERC20} from "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {Strings} from "openzeppelin-contracts/contracts/utils/Strings.sol";
 import {IUserProxy} from "V2-gov/src/interfaces/IUserProxy.sol";
-import {CurveV2GaugeRewards} from "V2-gov/src/CurveV2GaugeRewards.sol";
 import {Governance} from "V2-gov/src/Governance.sol";
-import {IExchangeHelpers} from "src/Zappers/Interfaces/IExchangeHelpers.sol";
-import {ILeverageZapper} from "src/Zappers/Interfaces/ILeverageZapper.sol";
-import {IZapper} from "src/Zappers/Interfaces/IZapper.sol";
 import {IActivePool} from "src/Interfaces/IActivePool.sol";
 import {IAddressesRegistry} from "src/Interfaces/IAddressesRegistry.sol";
 import {IBoldToken} from "src/Interfaces/IBoldToken.sol";
@@ -24,13 +20,7 @@ import {ITroveNFT} from "src/Interfaces/ITroveNFT.sol";
 import {IPriceFeed} from "src/Interfaces/IPriceFeed.sol";
 import {IStabilityPool} from "src/Interfaces/IStabilityPool.sol";
 import {IWETH} from "src/Interfaces/IWETH.sol";
-import {ICurveStableSwapNG} from "../Interfaces/Curve/ICurveStableSwapNG.sol";
-import {ILiquidityGaugeV6} from "../Interfaces/Curve/ILiquidityGaugeV6.sol";
 import {StringEquality} from "./StringEquality.sol";
-
-function coalesce(address a, address b) pure returns (address) {
-    return a != address(0) ? a : b;
-}
 
 contract UseDeployment is CommonBase {
     using stdJson for string;
@@ -48,15 +38,12 @@ contract UseDeployment is CommonBase {
         IActivePool activePool;
         IDefaultPool defaultPool;
         IStabilityPool stabilityPool;
-        ILeverageZapper leverageZapper;
-        IZapper zapper;
     }
 
     address WETH;
     address WSTETH;
     address RETH;
     address BOLD;
-    address USDC;
     address LQTY;
     address LUSD;
 
@@ -67,21 +54,13 @@ contract UseDeployment is CommonBase {
     uint256 REGISTRATION_FEE;
 
     IWETH weth;
-    IERC20 usdc;
     IERC20 lqty;
     IERC20 lusd;
 
     ICollateralRegistry collateralRegistry;
     IBoldToken boldToken;
     IHintHelpers hintHelpers;
-    IExchangeHelpers exchangeHelpers;
     Governance governance;
-    ICurveStableSwapNG curveUsdcBold;
-    ILiquidityGaugeV6 curveUsdcBoldGauge;
-    CurveV2GaugeRewards curveUsdcBoldInitiative;
-    ICurveStableSwapNG curveLusdBold;
-    ILiquidityGaugeV6 curveLusdBoldGauge;
-    CurveV2GaugeRewards curveLusdBoldInitiative;
     address defiCollectiveInitiative;
     address[] initialInitiatives;
     BranchContracts[] branches;
@@ -91,27 +70,13 @@ contract UseDeployment is CommonBase {
         collateralRegistry = ICollateralRegistry(json.readAddress(".collateralRegistry"));
         boldToken = IBoldToken(BOLD = json.readAddress(".boldToken"));
         hintHelpers = IHintHelpers(json.readAddress(".hintHelpers"));
-        exchangeHelpers = IExchangeHelpers(json.readAddress(".exchangeHelpers"));
         governance = Governance(json.readAddress(".governance.governance"));
-        curveUsdcBold = ICurveStableSwapNG(json.readAddress(".governance.curveUsdcBoldPool"));
-        curveUsdcBoldGauge = ILiquidityGaugeV6(json.readAddress(".governance.curveUsdcBoldGauge"));
-        curveUsdcBoldInitiative = CurveV2GaugeRewards(json.readAddress(".governance.curveUsdcBoldInitiative"));
-        curveLusdBold = ICurveStableSwapNG(json.readAddress(".governance.curveLusdBoldPool"));
-        curveLusdBoldGauge = ILiquidityGaugeV6(json.readAddress(".governance.curveLusdBoldGauge"));
-        curveLusdBoldInitiative = CurveV2GaugeRewards(json.readAddress(".governance.curveLusdBoldInitiative"));
         defiCollectiveInitiative = json.readAddress(".governance.defiCollectiveInitiative");
         initialInitiatives = json.readAddressArray(".governance.initialInitiatives");
 
         vm.label(address(collateralRegistry), "CollateralRegistry");
         vm.label(address(hintHelpers), "HintHelpers");
-        vm.label(address(exchangeHelpers), "ExchangeHelpers");
         vm.label(address(governance), "Governance");
-        vm.label(address(curveUsdcBold), "CurveStableSwapNG");
-        vm.label(address(curveUsdcBoldGauge), "LiquidityGaugeV6");
-        vm.label(address(curveUsdcBoldInitiative), "CurveV2GaugeRewards");
-        vm.label(address(curveLusdBold), "CurveStableSwapNG");
-        vm.label(address(curveLusdBoldGauge), "LiquidityGaugeV6");
-        vm.label(address(curveLusdBoldInitiative), "CurveV2GaugeRewards");
 
         ETH_GAS_COMPENSATION = json.readUint(".constants.ETH_GAS_COMPENSATION");
         MIN_DEBT = json.readUint(".constants.MIN_DEBT");
@@ -119,7 +84,6 @@ contract UseDeployment is CommonBase {
         EPOCH_DURATION = json.readUint(".governance.constants.EPOCH_DURATION");
         REGISTRATION_FEE = json.readUint(".governance.constants.REGISTRATION_FEE");
         LQTY = json.readAddress(".governance.LQTYToken");
-        USDC = curveUsdcBold.coins(0) != BOLD ? curveUsdcBold.coins(0) : curveUsdcBold.coins(1);
         LUSD = address(IUserProxy(governance.userProxyImplementation()).lusd());
 
         for (uint256 i = 0; i < collateralRegistry.totalCollaterals(); ++i) {
@@ -135,14 +99,7 @@ contract UseDeployment is CommonBase {
                 sortedTroves: ISortedTroves(json.readAddress(string.concat(branch, ".sortedTroves"))),
                 activePool: IActivePool(json.readAddress(string.concat(branch, ".activePool"))),
                 defaultPool: IDefaultPool(json.readAddress(string.concat(branch, ".defaultPool"))),
-                stabilityPool: IStabilityPool(json.readAddress(string.concat(branch, ".stabilityPool"))),
-                leverageZapper: ILeverageZapper(json.readAddress(string.concat(branch, ".leverageZapper"))),
-                zapper: IZapper(
-                    coalesce(
-                        json.readAddress(string.concat(branch, ".wethZapper")),
-                        json.readAddress(string.concat(branch, ".gasCompZapper"))
-                    )
-                )
+                stabilityPool: IStabilityPool(json.readAddress(string.concat(branch, ".stabilityPool")))
             });
 
             vm.label(address(branches[i].priceFeed), "PriceFeed");
@@ -153,8 +110,6 @@ contract UseDeployment is CommonBase {
             vm.label(address(branches[i].activePool), "ActivePool");
             vm.label(address(branches[i].defaultPool), "DefaultPool");
             vm.label(address(branches[i].stabilityPool), "StabilityPool");
-            vm.label(address(branches[i].leverageZapper), "LeverageZapper");
-            vm.label(address(branches[i].zapper), "Zapper");
 
             string memory collSymbol = branches[i].collToken.symbol();
             if (collSymbol.eq("WETH")) {
@@ -172,12 +127,10 @@ contract UseDeployment is CommonBase {
         vm.label(WSTETH, "wstETH");
         vm.label(RETH, "rETH");
         vm.label(BOLD, "BOLD");
-        vm.label(USDC, "USDC");
         vm.label(LQTY, "LQTY");
         vm.label(LUSD, "LUSD");
 
         weth = IWETH(WETH);
-        usdc = IERC20(USDC);
         lqty = IERC20(LQTY);
         lusd = IERC20(LUSD);
     }

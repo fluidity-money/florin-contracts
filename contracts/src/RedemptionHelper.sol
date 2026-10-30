@@ -133,7 +133,7 @@ contract RedemptionHelper is IRedemptionHelper {
 
         for (uint256 i = 0; i < numBranches; ++i) {
             if (branch[i].redeemable && branch[i].proportion > 0) {
-                (uint256 redemptionPrice,) = addresses[i].priceFeed().fetchRedemptionPrice();
+                (uint256 redemptionPrice,) = addresses[i].priceFeed().fetchRedemptionPriceNoPauseCheck();
                 redeemed[i].bold = truncatedBold * branch[i].proportion / totalProportions;
                 redeemed[i].coll = redeemed[i].bold * (DECIMAL_PRECISION - feePct) / redemptionPrice;
             }
