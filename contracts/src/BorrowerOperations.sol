@@ -478,7 +478,11 @@ contract BorrowerOperations is LiquityBase, AddRemoveManagers, IBorrowerOperatio
         ITroveManager troveManagerCached = troveManager;
         _requireTroveIsActive(troveManagerCached, _troveId);
 
-        bool allowStockPaused = _isCollIncrease && !_isDebtIncrease;
+        // Users can adjust their trove if they're not adding and they're not
+        // taking from the collateral:
+
+        bool allowStockPaused = (_isCollIncrease && !_isDebtIncrease)
+            || (!_isCollIncrease && !_isDebtIncrease);
 
         TroveChange memory troveChange;
         _initTroveChange(troveChange, _collChange, _isCollIncrease, _boldChange, _isDebtIncrease);
@@ -1041,7 +1045,7 @@ contract BorrowerOperations is LiquityBase, AddRemoveManagers, IBorrowerOperatio
                 newBatchTroveChange,
                 _maxUpfrontFee,
                 true, // _isTroveInBatch
-                false // _allowStockPaused
+                true // _allowStockPaused
             );
 
         // Recalculate newWeightedRecordedDebt, now taking into account the upfront fee
