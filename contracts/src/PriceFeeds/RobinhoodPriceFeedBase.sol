@@ -24,7 +24,6 @@ abstract contract RobinhoodPriceFeedBase is IMainnetPriceFeed {
     struct ChainlinkResponse {
         uint80 roundId;
         int256 answer;
-        uint256 timestamp;
         bool success;
     }
 
@@ -86,7 +85,6 @@ abstract contract RobinhoodPriceFeedBase is IMainnetPriceFeed {
             // If call to Chainlink succeeds, return the response and success = true
             chainlinkResponse.roundId = roundId;
             chainlinkResponse.answer = answer;
-            chainlinkResponse.timestamp = updatedAt;
             chainlinkResponse.success = true;
 
             return chainlinkResponse;

@@ -175,7 +175,10 @@ contract SPYPriceFeed is RobinhoodPriceFeedBase {
             (ethUsdPrice, ethUsdOracleDown) = _getOracleAnswer(ethUsdOracle);
         }
 
-        // If the ETH-USD Chainlink response was invalid in this transaction, return the last good ETH-USD price calculated
+        // If the ETH-USD Chainlink response was invalid in this transaction,
+        // return the last good ETH-USD price calculated This can only happen if
+        // the sequencer is reported as having an outage. We don't do staleness
+        // checking in this oracle.
         if (ethUsdOracleDown) return (super._shutDownAndSwitchToLastGoodPriceNoReturn(address(ethUsdOracle.aggregator)), true);
 
         lastGoodPrice = ethUsdPrice;
