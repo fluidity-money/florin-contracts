@@ -507,8 +507,6 @@ contract BorrowerOperations is LiquityBase, AddRemoveManagers, IBorrowerOperatio
         ITroveManager troveManagerCached = troveManager;
         _requireTroveIsZombie(troveManagerCached, _troveId);
 
-        bool allowStockPaused = _isCollIncrease && !_isDebtIncrease;
-
         TroveChange memory troveChange;
         _initTroveChange(troveChange, _collChange, _isCollIncrease, _boldChange, _isDebtIncrease);
         _adjustTrove(
@@ -516,7 +514,7 @@ contract BorrowerOperations is LiquityBase, AddRemoveManagers, IBorrowerOperatio
             _troveId,
             troveChange,
             _maxUpfrontFee,
-            allowStockPaused
+            false // Zombie reactivation is never allowed while stock trading is paused.
         );
 
         troveManagerCached.setTroveStatusToActive(_troveId);

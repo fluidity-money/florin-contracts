@@ -55,12 +55,13 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
     uint256 constant NUM_BRANCHES = 3;
 
     address SPY_ADDRESS = 0x117cc2133c37B721F49dE2A7a74833232B3B4C0C;
-    address WETH_ADDRESS = 0x0000000000000000000000000000000000000000;
+    // Canonical Robinhood mainnet WETH: https://docs.robinhood.com/chain/contracts/
+    address WETH_ADDRESS = 0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73;
     address SPY_ORACLE_ADDRESS = 0x319724394D3A0e3669269846abE664Cd621f9f6A;
 
-    // used for gas compensation and as collateral of the first branch
-    // tapping disallowed
+    // Collateral of the first branch
     ISPYToken SPY;
+    // Gas compensation token, separate from SPY collateral
     IWETH WETH;
 
     // V1
@@ -210,8 +211,9 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
         }
 
         if (block.chainid == ROBINHOOD_CHAIN) {
-            // robinhood
+            // robinhood mainnet: SPY collateral and separate WETH gas compensation
             SPY = ISPYToken(SPY_ADDRESS);
+            WETH = IWETH(WETH_ADDRESS);
             lqty = LQTY_ADDRESS;
             stakingV1 = LQTY_STAKING_ADDRESS;
             lusd = LUSD_ADDRESS;
