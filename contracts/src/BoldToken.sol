@@ -59,8 +59,6 @@ contract BoldToken is Ownable, IBoldToken, ERC20Permit {
     function setCollateralRegistry(address _collateralRegistryAddress) external override onlyOwner {
         collateralRegistryAddress = _collateralRegistryAddress;
         emit CollateralRegistryAddressChanged(_collateralRegistryAddress);
-
-        _renounceOwnership();
     }
 
     // --- Functions for intra-Liquity calls ---

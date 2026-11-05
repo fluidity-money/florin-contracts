@@ -31,8 +31,8 @@ contract CollateralRegistry is ICollateralRegistry, Ownable {
     constructor(IBoldToken _boldToken, IERC20Metadata[] memory _tokens, ITroveManager[] memory _troveManagers, address _governance) Ownable(_governance) {
         boldToken = _boldToken;
 
-        require(tokens.length == _troveManagers.length, "Token list inequal");
-        require(tokens.length > 0, "No tokens");
+        require(_tokens.length == _troveManagers.length, "Token list inequal");
+        require(_tokens.length > 0, "No tokens");
 
         tokens = _tokens;
         troveManagers = _troveManagers;
@@ -52,6 +52,8 @@ contract CollateralRegistry is ICollateralRegistry, Ownable {
     }
 
     function addCollateralType(IERC20Metadata _token, ITroveManager _troveManager) external onlyOwner {
+        require(address(_token) != address(0), "Invalid token");
+        require(address(_troveManager) != address(0),  "Invalid Trove Manager");
         tokens.push(_token);
         troveManagers.push(_troveManager);
         emit MarketAdded(_token, _troveManager);
