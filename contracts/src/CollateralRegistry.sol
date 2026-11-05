@@ -3,6 +3,7 @@
 pragma solidity 0.8.24;
 
 import "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+import {Ownable} from "src/Dependencies/Ownable.sol";
 
 import "./Interfaces/ITroveManager.sol";
 import "./Interfaces/IBoldToken.sol";
@@ -11,31 +12,10 @@ import "./Dependencies/LiquityMath.sol";
 
 import "./Interfaces/ICollateralRegistry.sol";
 
-contract CollateralRegistry is ICollateralRegistry {
-    // See: https://github.com/ethereum/solidity/issues/12587
-    uint256 public immutable totalCollaterals;
+contract CollateralRegistry is ICollateralRegistry, Ownable {
+    IERC20Metadata[] public tokens;
 
-    IERC20Metadata internal immutable token0;
-    IERC20Metadata internal immutable token1;
-    IERC20Metadata internal immutable token2;
-    IERC20Metadata internal immutable token3;
-    IERC20Metadata internal immutable token4;
-    IERC20Metadata internal immutable token5;
-    IERC20Metadata internal immutable token6;
-    IERC20Metadata internal immutable token7;
-    IERC20Metadata internal immutable token8;
-    IERC20Metadata internal immutable token9;
-
-    ITroveManager internal immutable troveManager0;
-    ITroveManager internal immutable troveManager1;
-    ITroveManager internal immutable troveManager2;
-    ITroveManager internal immutable troveManager3;
-    ITroveManager internal immutable troveManager4;
-    ITroveManager internal immutable troveManager5;
-    ITroveManager internal immutable troveManager6;
-    ITroveManager internal immutable troveManager7;
-    ITroveManager internal immutable troveManager8;
-    ITroveManager internal immutable troveManager9;
+    ITroveManager[] public troveManagers;
 
     IBoldToken public immutable boldToken;
 
@@ -46,36 +26,19 @@ contract CollateralRegistry is ICollateralRegistry {
 
     event BaseRateUpdated(uint256 _baseRate);
     event LastFeeOpTimeUpdated(uint256 _lastFeeOpTime);
+    event MarketAdded(IERC20Metadata token, ITroveManager troveManager);
 
-    constructor(IBoldToken _boldToken, IERC20Metadata[] memory _tokens, ITroveManager[] memory _troveManagers) {
-        uint256 numTokens = _tokens.length;
-        require(numTokens > 0, "Collateral list cannot be empty");
-        require(numTokens <= 10, "Collateral list too long");
-        totalCollaterals = numTokens;
-
+    constructor(IBoldToken _boldToken, IERC20Metadata[] memory _tokens, ITroveManager[] memory _troveManagers, address _governance) Ownable(_governance) {
         boldToken = _boldToken;
 
-        token0 = _tokens[0];
-        token1 = numTokens > 1 ? _tokens[1] : IERC20Metadata(address(0));
-        token2 = numTokens > 2 ? _tokens[2] : IERC20Metadata(address(0));
-        token3 = numTokens > 3 ? _tokens[3] : IERC20Metadata(address(0));
-        token4 = numTokens > 4 ? _tokens[4] : IERC20Metadata(address(0));
-        token5 = numTokens > 5 ? _tokens[5] : IERC20Metadata(address(0));
-        token6 = numTokens > 6 ? _tokens[6] : IERC20Metadata(address(0));
-        token7 = numTokens > 7 ? _tokens[7] : IERC20Metadata(address(0));
-        token8 = numTokens > 8 ? _tokens[8] : IERC20Metadata(address(0));
-        token9 = numTokens > 9 ? _tokens[9] : IERC20Metadata(address(0));
+        require(tokens.length == _troveManagers.length, "Token list inequal");
+        require(tokens.length > 0, "No tokens");
 
-        troveManager0 = _troveManagers[0];
-        troveManager1 = numTokens > 1 ? _troveManagers[1] : ITroveManager(address(0));
-        troveManager2 = numTokens > 2 ? _troveManagers[2] : ITroveManager(address(0));
-        troveManager3 = numTokens > 3 ? _troveManagers[3] : ITroveManager(address(0));
-        troveManager4 = numTokens > 4 ? _troveManagers[4] : ITroveManager(address(0));
-        troveManager5 = numTokens > 5 ? _troveManagers[5] : ITroveManager(address(0));
-        troveManager6 = numTokens > 6 ? _troveManagers[6] : ITroveManager(address(0));
-        troveManager7 = numTokens > 7 ? _troveManagers[7] : ITroveManager(address(0));
-        troveManager8 = numTokens > 8 ? _troveManagers[8] : ITroveManager(address(0));
-        troveManager9 = numTokens > 9 ? _troveManagers[9] : ITroveManager(address(0));
+        tokens = _tokens;
+        troveManagers = _troveManagers;
+        for (uint i = 0; i < _tokens.length; ++i) {
+            emit MarketAdded(_tokens[i], _troveManagers[i]);
+        }
 
         // Initialize the baseRate state variable
         baseRate = INITIAL_BASE_RATE;
@@ -83,10 +46,15 @@ contract CollateralRegistry is ICollateralRegistry {
     }
 
     struct RedemptionTotals {
-        uint256 numCollaterals;
         uint256 boldSupplyAtStart;
         uint256 unbacked;
         uint256 redeemedAmount;
+    }
+
+    function addCollateralType(IERC20Metadata _token, ITroveManager _troveManager) external onlyOwner {
+        tokens.push(_token);
+        troveManagers.push(_troveManager);
+        emit MarketAdded(_token, _troveManager);
     }
 
     function redeemCollateral(uint256 _boldAmount, uint256 _maxIterationsPerCollateral, uint256 _maxFeePercentage)
@@ -97,12 +65,11 @@ contract CollateralRegistry is ICollateralRegistry {
 
         RedemptionTotals memory totals;
 
-        totals.numCollaterals = totalCollaterals;
-        uint256[] memory unbackedPortions = new uint256[](totals.numCollaterals);
-        uint256[] memory prices = new uint256[](totals.numCollaterals);
+        uint256[] memory unbackedPortions = new uint256[](tokens.length);
+        uint256[] memory prices = new uint256[](tokens.length);
 
         // Gather and accumulate unbacked portions
-        for (uint256 index = 0; index < totals.numCollaterals; index++) {
+        for (uint256 index = 0; index < tokens.length; ++index) {
             ITroveManager troveManager = getTroveManager(index);
             (uint256 unbackedPortion, uint256 price, bool redeemable) =
                 troveManager.getUnbackedPortionPriceAndRedeemability();
@@ -116,8 +83,8 @@ contract CollateralRegistry is ICollateralRegistry {
         // There’s an unlikely scenario where all the normally redeemable branches (i.e. having TCR > SCR) have 0 unbacked
         // In that case, we redeem proportionally to branch size
         if (totals.unbacked == 0) {
-            unbackedPortions = new uint256[](totals.numCollaterals);
-            for (uint256 index = 0; index < totals.numCollaterals; index++) {
+            unbackedPortions = new uint256[](tokens.length);
+            for (uint256 index = 0; index < tokens.length; index++) {
                 ITroveManager troveManager = getTroveManager(index);
                 (,, bool redeemable) = troveManager.getUnbackedPortionPriceAndRedeemability();
                 if (redeemable) {
@@ -148,7 +115,7 @@ contract CollateralRegistry is ICollateralRegistry {
         //require(newBaseRate < DECIMAL_PRECISION, "CR: Fee would eat up all collateral");
 
         // Compute redemption amount for each collateral and redeem against the corresponding TroveManager
-        for (uint256 index = 0; index < totals.numCollaterals; index++) {
+        for (uint256 index = 0; index < tokens.length; ++index) {
             //uint256 unbackedPortion = unbackedPortions[index];
             if (unbackedPortions[index] > 0) {
                 uint256 redeemAmount = _boldAmount * unbackedPortions[index] / totals.unbacked;
@@ -273,32 +240,18 @@ contract CollateralRegistry is ICollateralRegistry {
 
     // getters
 
-    function getToken(uint256 _index) external view returns (IERC20Metadata) {
-        if (_index == 0) return token0;
-        else if (_index == 1) return token1;
-        else if (_index == 2) return token2;
-        else if (_index == 3) return token3;
-        else if (_index == 4) return token4;
-        else if (_index == 5) return token5;
-        else if (_index == 6) return token6;
-        else if (_index == 7) return token7;
-        else if (_index == 8) return token8;
-        else if (_index == 9) return token9;
-        else revert("Invalid index");
+    function getToken(uint256 _index) external view returns (IERC20Metadata m) {
+        m = tokens[_index];
+        require(m != IERC20Metadata(address(0)), "Invalid index");
     }
 
-    function getTroveManager(uint256 _index) public view returns (ITroveManager) {
-        if (_index == 0) return troveManager0;
-        else if (_index == 1) return troveManager1;
-        else if (_index == 2) return troveManager2;
-        else if (_index == 3) return troveManager3;
-        else if (_index == 4) return troveManager4;
-        else if (_index == 5) return troveManager5;
-        else if (_index == 6) return troveManager6;
-        else if (_index == 7) return troveManager7;
-        else if (_index == 8) return troveManager8;
-        else if (_index == 9) return troveManager9;
-        else revert("Invalid index");
+    function getTroveManager(uint256 _index) public view returns (ITroveManager m) {
+        m = troveManagers[_index];
+        require(m != ITroveManager(address(0)), "Invalid index");
+    }
+
+    function totalCollaterals() external view returns (uint256) {
+         return tokens.length;
     }
 
     // require functions

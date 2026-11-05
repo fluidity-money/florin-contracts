@@ -309,7 +309,10 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
         });
 
         DeploymentResult memory deployed =
-            _deployAndConnectContracts(troveManagerParamsArray, collNames, collSymbols, deployConnectParams);
+            _deployAndConnectContracts(
+                troveManagerParamsArray, collNames, collSymbols, deployConnectParams,
+                address(governance)
+            );
 
         vm.stopBroadcast();
 
@@ -434,7 +437,8 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
         TroveManagerParams[] memory troveManagerParamsArray,
         string[] memory _collNames,
         string[] memory _collSymbols,
-        DeployConnectParams memory _deployConnectParams
+        DeployConnectParams memory _deployConnectParams,
+        address _governance
     ) internal returns (DeploymentResult memory r) {
         assert(_collNames.length == troveManagerParamsArray.length - 1);
         assert(_collSymbols.length == troveManagerParamsArray.length - 1);
@@ -485,7 +489,7 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
             vars.troveManagers[vars.i] = ITroveManager(troveManagerAddress);
         }
 
-        r.collateralRegistry = new CollateralRegistry(r.boldToken, vars.collaterals, vars.troveManagers);
+        r.collateralRegistry = new CollateralRegistry(r.boldToken, vars.collaterals, vars.troveManagers, _governance);
         r.hintHelpers = new HintHelpers(r.collateralRegistry);
         r.multiTroveGetter = new MultiTroveGetter(r.collateralRegistry);
         r.debtInFrontHelper = new DebtInFrontHelper(r.collateralRegistry, r.hintHelpers);
