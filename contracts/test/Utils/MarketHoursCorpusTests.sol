@@ -8,7 +8,7 @@ import {packUSMarketHours2027} from "script/EncodeMarketHours.s.sol";
 // otherwise mask an incorrect transition hour.
 contract CalendarFeedHarness is SPYPriceFeed {
     constructor(address oracle, address stock, address sequencer, uint256 word, HolidayWord[] memory holidays)
-        SPYPriceFeed(oracle, address(0), stock, sequencer, word, holidays)
+        SPYPriceFeed(oracle, address(0), stock, sequencer, word, holidays, address(0))
     {}
 
     function isDST(uint256 ts) external view returns (bool) {
@@ -155,7 +155,7 @@ abstract contract MarketHoursOperationsCorpusTests is StockPauseOperationsSetup,
         (uint256 word, HolidayWord[] memory holidays) = packUSMarketHours2027();
         ChainlinkOracleMock sequencer = new ChainlinkOracleMock();
         stockFeed = new SPYPriceFeed(
-            address(oracle), address(borrowerOperations), address(stock), address(sequencer), word, holidays
+            address(oracle), address(borrowerOperations), address(stock), address(sequencer), word, holidays, address(0)
         );
         vm.etch(address(priceFeed), address(new OperationsFeedBridge(stockFeed)).code);
     }

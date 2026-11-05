@@ -74,7 +74,7 @@ abstract contract StockPauseOperationsSetup is DevTestSetup {
         HolidayWord[] memory holidays = new HolidayWord[](1);
         holidays[0] = HolidayWord(0, 0); // nonempty constructor input, no holiday
         stockFeed = new SPYPriceFeed(
-            address(oracle), address(borrowerOperations), address(stock), address(sequencer), hoursWord, holidays
+            address(oracle), address(borrowerOperations), address(stock), address(sequencer), hoursWord, holidays, address(0)
         );
         vm.etch(address(priceFeed), address(new OperationsFeedBridge(stockFeed)).code);
         assertFalse(stockFeed.isStockPaused());

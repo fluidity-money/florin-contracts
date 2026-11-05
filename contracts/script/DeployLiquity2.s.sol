@@ -24,7 +24,7 @@ import {DebtInFrontHelper, IDebtInFrontHelper} from "src/DebtInFrontHelper.sol";
 import {RedemptionHelper, IRedemptionHelper} from "src/RedemptionHelper.sol";
 import "src/SortedTroves.sol";
 import "src/StabilityPool.sol";
-import "src/PriceFeeds/SPYPriceFeed.sol";
+import {SPYPriceFeed, HolidayWord} from "src/PriceFeeds/SPYPriceFeed.sol";
 import "src/CollateralRegistry.sol";
 import "test/TestContracts/PriceFeedTestnet.sol";
 import "test/TestContracts/MetadataDeployment.sol";
@@ -49,6 +49,11 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
     string constant DEPLOYMENT_MODE_USE_EXISTING_BOLD = "use-existing-bold";
 
     uint256 constant ROBINHOOD_CHAIN = 4663;
+    uint256 constant ROBINHOOD_TESTNET_CHAIN = 46630;
+
+    // Canonical L2 WETH, not Sepolia L1 WETH:
+    // https://docs.robinhood.com/chain/protocol-contracts/
+    address constant ROBINHOOD_TESTNET_WETH = 0x7943e237c7F95DA44E0301572D358911207852Fa;
 
     uint256 constant AVAILABILITY_WORD = 0;
 
@@ -178,7 +183,31 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
             (block.chainid == 1 ? _latestUTCMidnightBetweenWednesdayAndThursday() : block.timestamp) - EPOCH_DURATION
         );
 
-        useTestnetPriceFeeds = vm.envOr("USE_TESTNET_PRICEFEEDS", false);
+        useTestnetPriceFeeds = vm.envOr("USE_TESTNET_PRICEFEEDS", block.chainid == ROBINHOOD_TESTNET_CHAIN);
+
+        // Validate testnet dependencies before creating any contracts. Mainnet SPY
+        // and Liquity V1 addresses must never be reused on Robinhood testnet.
+        if (block.chainid == ROBINHOOD_TESTNET_CHAIN && !deploymentMode.eq(DEPLOYMENT_MODE_BOLD_ONLY)) {
+            SPY_ADDRESS = vm.envAddress("SPY_ADDRESS");
+            WETH_ADDRESS = ROBINHOOD_TESTNET_WETH;
+            lqty = vm.envAddress("LQTY_ADDRESS");
+            stakingV1 = vm.envAddress("LQTY_STAKING_ADDRESS");
+            lusd = vm.envAddress("LUSD_ADDRESS");
+            require(SPY_ADDRESS.code.length > 0, "Testnet SPY has no code");
+            require(WETH_ADDRESS.code.length > 0, "Testnet WETH has no code");
+            require(lqty.code.length > 0, "Testnet LQTY has no code");
+            require(stakingV1.code.length > 0, "Testnet staking has no code");
+            require(lusd.code.length > 0, "Testnet LUSD has no code");
+            require(useTestnetPriceFeeds, "Testnet deployment requires USE_TESTNET_PRICEFEEDS=true");
+            require(!vm.envOr("OPEN_DEMO_TROVES", false), "Demo troves require faucet collateral and funded WETH");
+            SPY = ISPYToken(SPY_ADDRESS);
+            WETH = IWETH(WETH_ADDRESS);
+        } else {
+            require(
+                block.chainid == ROBINHOOD_CHAIN || block.chainid == ROBINHOOD_TESTNET_CHAIN,
+                "Use Robinhood mainnet or testnet RPC"
+            );
+        }
 
         _log("Deployer:               ", deployer.toHexString());
         _log("Deployer balance:       ", deployer.balance.decimal());
@@ -414,7 +443,7 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
             // ETH
             vars.collaterals[0] = IERC20Metadata(address(SPY));
         } else {
-            // Sepolia
+            // Robinhood testnet: existing SPY plus faucet-only demo branches
             // Use SPY as collateral for the first branch
             vars.collaterals[0] = IERC20Metadata(address(SPY));
 
@@ -536,7 +565,7 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
             SALT, keccak256(getBytecode(type(SortedTroves).creationCode, address(contracts.addressesRegistry)))
         );
 
-        contracts.priceFeed = _deployPriceFeed(address(_collToken), addresses.borrowerOperations, addresses.sequencerUptimeFeed, _stockMarketHoursWord, _holidayWords);
+        contracts.priceFeed = _deployPriceFeed(address(_collToken), addresses.borrowerOperations, addresses.sequencerUptimeFeed, _stockMarketHoursWord, _holidayWords, _governance);
 
         IAddressesRegistry.AddressVars memory addressVars = IAddressesRegistry.AddressVars({
             collToken: _collToken,
@@ -590,17 +619,17 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
 
     }
 
-    function _deployPriceFeed(address _collTokenAddress, address _borroweOperationsAddress, address _sequencerUptimeFeed, uint256 _stockMarketHoursWord, HolidayWord[] memory _holidayWords)
+    function _deployPriceFeed(address _collTokenAddress, address _borroweOperationsAddress, address _sequencerUptimeFeed, uint256 _stockMarketHoursWord, HolidayWord[] memory _holidayWords, address _governance)
         internal
         returns (IPriceFeed)
     {
         if (block.chainid == ROBINHOOD_CHAIN && !useTestnetPriceFeeds) {
             // robinhood mainnet
             assert(_collTokenAddress == SPY_ADDRESS);
-            return new SPYPriceFeed(SPY_ORACLE_ADDRESS, _borroweOperationsAddress, address(SPY), _sequencerUptimeFeed, _stockMarketHoursWord, _holidayWords);
+            return new SPYPriceFeed(SPY_ORACLE_ADDRESS, _borroweOperationsAddress, address(SPY), _sequencerUptimeFeed, _stockMarketHoursWord, _holidayWords, _governance);
         }
 
-        // Sepolia
+        // Explicit mock feed (default on Robinhood testnet).
         return new PriceFeedTestnet();
     }
 

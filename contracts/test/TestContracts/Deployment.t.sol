@@ -19,14 +19,13 @@ import "./CollateralRegistryTester.sol";
 import "src/TroveNFT.sol";
 import "src/NFTMetadata/MetadataNFT.sol";
 import "src/CollateralRegistry.sol";
+import {SPYPriceFeed, HolidayWord} from "src/PriceFeeds/SPYPriceFeed.sol";
 import "./MockInterestRouter.sol";
 import "./PriceFeedTestnet.sol";
 import "./ChainlinkOracleMock.sol";
 import "./MetadataDeployment.sol";
 import {WETHTester} from "./WETHTester.sol";
 import {ERC20Faucet} from "./ERC20Faucet.sol";
-
-import "src/PriceFeeds/SPYPriceFeed.sol";
 
 import "forge-std/console2.sol";
 
@@ -659,7 +658,8 @@ contract TestDeployer is MetadataDeployment {
             _stockToken,
             _externalAddresses.sequencerUptimeFeed,
             0,
-            holidayWords
+            holidayWords,
+            address(0)
         );
     }
 }

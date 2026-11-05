@@ -8,7 +8,8 @@ import "src/PriceFeeds/SPYPriceFeed.sol";
 import "./TestContracts/Accounts.sol";
 import "./TestContracts/ChainlinkOracleMock.sol";
 import "./TestContracts/GasGuzzlerOracle.sol";
-import "./TestContracts/Deployment.t.sol";
+
+import {TestDeployer, CollateralRegistryTester} from "./TestContracts/Deployment.t.sol";
 
 import "src/Dependencies/AggregatorV3Interface.sol";
 

@@ -6,6 +6,8 @@ import "./RobinhoodPriceFeedBase.sol";
 
 import "../Dependencies/StockTokenInterface.sol";
 
+import {Ownable} from "openzeppelin/contracts/access/Ownable.sol";
+
 // import "forge-std/console2.sol";
 
 struct HolidayWord {
@@ -13,14 +15,18 @@ struct HolidayWord {
     uint256 value;
 }
 
-contract SPYPriceFeed is RobinhoodPriceFeedBase {
+contract SPYPriceFeed is RobinhoodPriceFeedBase, Ownable {
+    event HolidayWordUpdated(uint key, uint256 newValue);
+    event StockMarketWordUpdated(uint256 word);
+
     uint256 public stockMarketHoursWord;
     mapping(uint => uint256) public holidayWords;
 
     StockTokenInterface public stockToken;
 
-    constructor(address _ethUsdOracleAddress, address _borrowerOperationsAddress, address _stockToken, address _sequencerUptimeFeed, uint256 _stockMarketHoursWord, HolidayWord[] memory _holidayWords)
+    constructor(address _ethUsdOracleAddress, address _borrowerOperationsAddress, address _stockToken, address _sequencerUptimeFeed, uint256 _stockMarketHoursWord, HolidayWord[] memory _holidayWords, address _governance)
         RobinhoodPriceFeedBase(_ethUsdOracleAddress, _borrowerOperationsAddress, _sequencerUptimeFeed)
+        Ownable(_governance)
     {
         require(_holidayWords.length > 0);
 
@@ -29,8 +35,10 @@ contract SPYPriceFeed is RobinhoodPriceFeedBase {
         _fetchPricePrimary();
 
         stockMarketHoursWord = _stockMarketHoursWord;
+        emit StockMarketWordUpdated(_stockMarketHoursWord);
         for (uint i = 0; i < _holidayWords.length; ++i) {
             holidayWords[_holidayWords[i].key] = _holidayWords[i].value;
+            emit HolidayWordUpdated(_holidayWords[i].key, _holidayWords[i].value);
         }
 
         // Check the oracle didn't already fail
@@ -125,6 +133,16 @@ contract SPYPriceFeed is RobinhoodPriceFeedBase {
     function isStockPaused() public view returns (bool) {
         return isStockMarketNonMarketHours(block.timestamp)
             || stockToken.paused();
+    }
+
+    function updateHoliday(uint256 _holidayKey, uint256 _word) external onlyOwner {
+        holidayWords[_holidayKey] = _word;
+        emit HolidayWordUpdated(_holidayKey, _word);
+    }
+
+    function updateHoursWord(uint256 _word) external onlyOwner {
+        stockMarketHoursWord = _word;
+        emit StockMarketWordUpdated(_word);
     }
 
     function fetchPrice() public returns (OracleAnswer memory oracleAnswer) {
