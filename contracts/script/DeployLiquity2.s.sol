@@ -62,12 +62,28 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
 
     uint256 constant AVAILABILITY_WORD = 0;
 
-    uint256 constant NUM_BRANCHES = 3;
+    uint256 constant NUM_BRANCHES = 8; // SPY + Mag7
 
     address SPY_ADDRESS = 0x117cc2133c37B721F49dE2A7a74833232B3B4C0C;
     // Canonical Robinhood mainnet WETH: https://docs.robinhood.com/chain/contracts/
     address WETH_ADDRESS = 0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73;
-    address SPY_ORACLE_ADDRESS = 0x319724394D3A0e3669269846abE664Cd621f9f6A;
+    address constant SPY_ORACLE_ADDRESS = 0x319724394D3A0e3669269846abE664Cd621f9f6A;
+
+    // Robinhood mainnet tokens and standard Chainlink token/USD proxies:
+    address constant AAPL_ADDRESS = 0xaF3D76f1834A1d425780943C99Ea8A608f8a93f9;
+    address constant AAPL_ORACLE_ADDRESS = 0x6B22A786bAa607d76728168703a39Ea9C99f2cD0;
+    address constant MSFT_ADDRESS = 0xe93237C50D904957Cf27E7B1133b510C669c2e74;
+    address constant MSFT_ORACLE_ADDRESS = 0x45C3C877C15E6BA2EBB19eA114Ea508d14C1Af2E;
+    address constant AMZN_ADDRESS = 0x12f190a9F9d7D37a250758b26824B97CE941bF54;
+    address constant AMZN_ORACLE_ADDRESS = 0xD5a1508ceD74c084eBf3cBe853e2C968fB2a651C;
+    address constant GOOGL_ADDRESS = 0x2e0847E8910a9732eB3fb1bb4b70a580ADAD4FE3;
+    address constant GOOGL_ORACLE_ADDRESS = 0xF6f373a037c30F0e5010d854385cA89185AE638b;
+    address constant META_ADDRESS = 0xc0D6457C16Cc70d6790Dd43521C899C87ce02f35;
+    address constant META_ORACLE_ADDRESS = 0x7C38C00C30BEe9378381E7B6135d7283356D71b1;
+    address constant NVDA_ADDRESS = 0xd0601CE157Db5bdC3162BbaC2a2C8aF5320D9EEC;
+    address constant NVDA_ORACLE_ADDRESS = 0x379EC4f7C378F34a1B47E4F3cbeBCbAC3E8E9F15;
+    address constant TSLA_ADDRESS = 0x322F0929c4625eD5bAd873c95208D54E1c003b2d;
+    address constant TSLA_ORACLE_ADDRESS = 0x4A1166a659A55625345e9515b32adECea5547C38;
 
     // Collateral of the first branch
     ISPYToken SPY;
@@ -236,7 +252,7 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
 
         TroveManagerParams[] memory troveManagerParamsArray = new TroveManagerParams[](NUM_BRANCHES);
 
-        // WETH
+        // SPY (retain existing branch risk parameters)
         troveManagerParamsArray[0] = TroveManagerParams({
             CCR: CCR_WETH,
             MCR: MCR_WETH,
@@ -246,7 +262,7 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
             LIQUIDATION_PENALTY_REDISTRIBUTION: LIQUIDATION_PENALTY_REDISTRIBUTION_WETH
         });
 
-        // wstETH
+        // MAG7: retain the previous non-SPY risk parameters; equity risk calibration is separate.
         troveManagerParamsArray[1] = TroveManagerParams({
             CCR: CCR_SETH,
             MCR: MCR_SETH,
@@ -256,15 +272,26 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
             LIQUIDATION_PENALTY_REDISTRIBUTION: LIQUIDATION_PENALTY_REDISTRIBUTION_SETH
         });
 
-        // rETH (same as wstETH)
-        troveManagerParamsArray[2] = troveManagerParamsArray[1];
+        for (uint256 i = 2; i < NUM_BRANCHES; i++) {
+            troveManagerParamsArray[i] = troveManagerParamsArray[1];
+        }
 
-        string[] memory collNames = new string[](2);
-        string[] memory collSymbols = new string[](2);
-        collNames[0] = "Wrapped liquid staked Ether 2.0";
-        collSymbols[0] = "wstETH";
-        collNames[1] = "Rocket Pool ETH";
-        collSymbols[1] = "rETH";
+        string[] memory collNames = new string[](NUM_BRANCHES - 1);
+        string[] memory collSymbols = new string[](NUM_BRANCHES - 1);
+        collNames[0] = unicode"Apple • Robinhood Token";
+        collSymbols[0] = "AAPL";
+        collNames[1] = unicode"Microsoft • Robinhood Token";
+        collSymbols[1] = "MSFT";
+        collNames[2] = unicode"Amazon • Robinhood Token";
+        collSymbols[2] = "AMZN";
+        collNames[3] = unicode"Alphabet Class A • Robinhood Token";
+        collSymbols[3] = "GOOGL";
+        collNames[4] = unicode"Meta Platforms • Robinhood Token";
+        collSymbols[4] = "META";
+        collNames[5] = unicode"NVIDIA • Robinhood Token";
+        collSymbols[5] = "NVDA";
+        collNames[6] = unicode"Tesla • Robinhood Token";
+        collSymbols[6] = "TSLA";
 
         // Governance is a stand in using a proxy that executes calldata
         // its given if it's by the multisig for now:
@@ -425,9 +452,15 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
 
         // Collaterals
         if (block.chainid == ROBINHOOD_CHAIN && !useTestnetPriceFeeds) {
-            // robinhood mainnet
-            // ETH
+            // Same order as collNames/collSymbols, with SPY at branch zero.
             vars.collaterals[0] = IERC20Metadata(address(SPY));
+            vars.collaterals[1] = IERC20Metadata(AAPL_ADDRESS);
+            vars.collaterals[2] = IERC20Metadata(MSFT_ADDRESS);
+            vars.collaterals[3] = IERC20Metadata(AMZN_ADDRESS);
+            vars.collaterals[4] = IERC20Metadata(GOOGL_ADDRESS);
+            vars.collaterals[5] = IERC20Metadata(META_ADDRESS);
+            vars.collaterals[6] = IERC20Metadata(NVDA_ADDRESS);
+            vars.collaterals[7] = IERC20Metadata(TSLA_ADDRESS);
         } else {
             // Robinhood testnet: existing SPY plus faucet-only demo branches
             // Use SPY as collateral for the first branch
@@ -610,13 +643,25 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
         returns (IPriceFeed)
     {
         if (block.chainid == ROBINHOOD_CHAIN && !useTestnetPriceFeeds) {
-            // robinhood mainnet
-            assert(_collTokenAddress == SPY_ADDRESS);
-            return new SPYPriceFeed(SPY_ORACLE_ADDRESS, _borroweOperationsAddress, address(SPY), _sequencerUptimeFeed, _stockMarketHoursWord, _holidayWords, _governance);
+            // SPYPriceFeed supports any Robinhood stock token. Bind both the
+            // oracle and pause checks to this branch's actual collateral.
+            return new SPYPriceFeed(_stockOracle(_collTokenAddress), _borroweOperationsAddress, _collTokenAddress, _sequencerUptimeFeed, _stockMarketHoursWord, _holidayWords, _governance);
         }
 
         // Explicit mock feed (default on Robinhood testnet).
         return new PriceFeedTestnet();
+    }
+
+    function _stockOracle(address _collTokenAddress) internal view returns (address) {
+        if (_collTokenAddress == SPY_ADDRESS) return SPY_ORACLE_ADDRESS;
+        if (_collTokenAddress == AAPL_ADDRESS) return AAPL_ORACLE_ADDRESS;
+        if (_collTokenAddress == MSFT_ADDRESS) return MSFT_ORACLE_ADDRESS;
+        if (_collTokenAddress == AMZN_ADDRESS) return AMZN_ORACLE_ADDRESS;
+        if (_collTokenAddress == GOOGL_ADDRESS) return GOOGL_ORACLE_ADDRESS;
+        if (_collTokenAddress == META_ADDRESS) return META_ORACLE_ADDRESS;
+        if (_collTokenAddress == NVDA_ADDRESS) return NVDA_ORACLE_ADDRESS;
+        if (_collTokenAddress == TSLA_ADDRESS) return TSLA_ORACLE_ADDRESS;
+        revert("Unsupported stock collateral");
     }
 
     function formatAmount(uint256 amount, uint256 decimals, uint256 digits) internal pure returns (string memory) {
