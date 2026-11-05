@@ -28,7 +28,6 @@ abstract contract RobinhoodPriceFeedBase is IMainnetPriceFeed {
     struct ChainlinkResponse {
         uint80 roundId;
         int256 answer;
-        bool success;
     }
 
     error InsufficientGasForExternalCall();
@@ -89,27 +88,9 @@ abstract contract RobinhoodPriceFeedBase is IMainnetPriceFeed {
         view
         returns (ChainlinkResponse memory chainlinkResponse)
     {
-        uint256 gasBefore = gasleft();
-
-        // Try to get latest price data:
-        try _aggregator.latestRoundData() returns (
-            uint80 roundId, int256 answer, uint256, /* startedAt */ uint256 updatedAt, uint80 /* answeredInRound */
-        ) {
-            // If call to Chainlink succeeds, return the response and success = true
-            chainlinkResponse.roundId = roundId;
-            chainlinkResponse.answer = answer;
-            chainlinkResponse.success = true;
-
-            return chainlinkResponse;
-        } catch {
-            // Require that enough gas was provided to prevent an OOG revert in the call to Chainlink
-            // causing a shutdown. Instead, just revert. Slightly conservative, as it includes gas used
-            // in the check itself.
-            if (gasleft() <= gasBefore / 64) revert InsufficientGasForExternalCall();
-
-            // If call to Chainlink aggregator reverts, return a zero response with success = false
-            return chainlinkResponse;
-        }
+        (uint80 roundId, int256 answer,, uint256 updatedAt,) = _aggregator.latestRoundData();
+        chainlinkResponse.roundId = roundId;
+        chainlinkResponse.answer = answer;
     }
 
     // False if:
@@ -120,7 +101,7 @@ abstract contract RobinhoodPriceFeedBase is IMainnetPriceFeed {
         view
         returns (bool)
     {
-        return chainlinkResponse.success && chainlinkResponse.answer > 0;
+        return chainlinkResponse.answer > 0;
     }
 
     // Trust assumption: Chainlink won't change the decimal precision on any feed used in v2 after deployment
