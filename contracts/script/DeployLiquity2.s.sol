@@ -23,6 +23,7 @@ import "src/MultiTroveGetter.sol";
 import {DebtInFrontHelper, IDebtInFrontHelper} from "src/DebtInFrontHelper.sol";
 import {RedemptionHelper, IRedemptionHelper} from "src/RedemptionHelper.sol";
 import "src/SortedTroves.sol";
+import "src/GovernanceUpgradeFlowThrough.sol";
 import "src/StabilityPool.sol";
 import {SPYPriceFeed, HolidayWord} from "src/PriceFeeds/SPYPriceFeed.sol";
 import "src/CollateralRegistry.sol";
@@ -31,6 +32,8 @@ import "test/TestContracts/MetadataDeployment.sol";
 import "test/Utils/Logging.sol";
 import "test/Utils/StringEquality.sol";
 import "forge-std/console2.sol";
+
+import {TransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 
 import {packUSMarketHours2027} from "./EncodeMarketHours.s.sol";
 import {DeployGovernance} from "./DeployGovernance.s.sol";
@@ -51,7 +54,7 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
     uint256 constant ROBINHOOD_CHAIN = 4663;
     uint256 constant ROBINHOOD_TESTNET_CHAIN = 46630;
 
-    address constant GOVERNANCE = 0x6221A9c005F6e47EB398fD867784CacfDcFFF4E7;
+    address constant MULTISIG = 0x6221A9c005F6e47EB398fD867784CacfDcFFF4E7;
 
     // Canonical L2 WETH, not Sepolia L1 WETH:
     // https://docs.robinhood.com/chain/protocol-contracts/
@@ -155,7 +158,7 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
 
     struct DeployConnectParams {
         address bold;
-        address governance;
+        GovernanceUpgradeFlowThrough governance;
     }
 
     function run() external {
@@ -273,8 +276,18 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
         collNames[1] = "Rocket Pool ETH";
         collSymbols[1] = "rETH";
 
+        // Governance is a stand in using a proxy that executes calldata
+        // its given if it's by the multisig for now:
+
+        GovernanceUpgradeFlowThrough governance =
+            GovernanceUpgradeFlowThrough(address(new TransparentUpgradeableProxy(
+                address(new GovernanceUpgradeFlowThrough(MULTISIG)),
+                MULTISIG,
+                ""
+            )));
+
         DeployConnectParams memory deployConnectParams = DeployConnectParams({
-            governance: GOVERNANCE,
+            governance: governance,
             bold: boldAddress
         });
 
@@ -464,7 +477,7 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
                 address(vars.troveManagers[vars.i]),
                 r.hintHelpers,
                 r.multiTroveGetter,
-                _deployConnectParams.governance,
+                address(_deployConnectParams.governance),
                 vars.stockMarketHoursWord,
                 vars.holidayWords
             );
