@@ -51,6 +51,8 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
     uint256 constant ROBINHOOD_CHAIN = 4663;
     uint256 constant ROBINHOOD_TESTNET_CHAIN = 46630;
 
+    address constant GOVERNANCE = 0x6221A9c005F6e47EB398fD867784CacfDcFFF4E7;
+
     // Canonical L2 WETH, not Sepolia L1 WETH:
     // https://docs.robinhood.com/chain/protocol-contracts/
     address constant ROBINHOOD_TESTNET_WETH = 0x7943e237c7F95DA44E0301572D358911207852Fa;
@@ -68,11 +70,6 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
     ISPYToken SPY;
     // Gas compensation token, separate from SPY collateral
     IWETH WETH;
-
-    // V1
-    address LQTY_ADDRESS = 0x6DEA81C8171D0bA574754EF6F8b412F2Ed88c54D;
-    address LQTY_STAKING_ADDRESS = 0x4f9Fbb3f1E99B56e0Fe2892e623Ed36A76Fc605d;
-    address LUSD_ADDRESS = 0x5f98805A4E8be255a32880FDeC7F6728C6568bA0;
 
     address internal lqty;
     address internal stakingV1;
@@ -156,6 +153,11 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
         IRedemptionHelper redemptionHelper;
     }
 
+    struct DeployConnectParams {
+        address bold;
+        address governance;
+    }
+
     function run() external {
         string memory saltStr = vm.envOr("SALT", block.timestamp.toString());
         SALT = keccak256(bytes(saltStr));
@@ -176,11 +178,6 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
             deploymentMode.eq(DEPLOYMENT_MODE_COMPLETE) || deploymentMode.eq(DEPLOYMENT_MODE_BOLD_ONLY)
                 || deploymentMode.eq(DEPLOYMENT_MODE_USE_EXISTING_BOLD),
             string.concat("Bad deployment mode: ", deploymentMode)
-        );
-
-        uint256 epochStart = vm.envOr(
-            "EPOCH_START",
-            (block.chainid == 1 ? _latestUTCMidnightBetweenWednesdayAndThursday() : block.timestamp) - EPOCH_DURATION
         );
 
         useTestnetPriceFeeds = vm.envOr("USE_TESTNET_PRICEFEEDS", block.chainid == ROBINHOOD_TESTNET_CHAIN);
@@ -213,7 +210,6 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
         _log("Deployer balance:       ", deployer.balance.decimal());
         _log("Deployment mode:        ", deploymentMode);
         _log("CREATE2 salt:           ", 'keccak256(bytes("', saltStr, '")) = ', uint256(SALT).toHexString());
-        _log("Governance epoch start: ", epochStart.toString());
         _log("Use testnet PriceFeeds: ", useTestnetPriceFeeds ? "yes" : "no");
 
         // Deploy Bold or pick up existing deployment
@@ -243,9 +239,6 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
             // robinhood mainnet: SPY collateral and separate WETH gas compensation
             SPY = ISPYToken(SPY_ADDRESS);
             WETH = IWETH(WETH_ADDRESS);
-            lqty = LQTY_ADDRESS;
-            stakingV1 = LQTY_STAKING_ADDRESS;
-            lusd = LUSD_ADDRESS;
         }
 
         TroveManagerParams[] memory troveManagerParamsArray = new TroveManagerParams[](NUM_BRANCHES);
@@ -280,27 +273,17 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
         collNames[1] = "Rocket Pool ETH";
         collSymbols[1] = "rETH";
 
-        DeployGovernanceParams memory deployGovernanceParams = DeployGovernanceParams({
-            epochStart: epochStart,
-            deployer: deployer,
-            salt: SALT,
-            stakingV1: stakingV1,
-            lqty: lqty,
-            lusd: lusd,
+        DeployConnectParams memory deployConnectParams = DeployConnectParams({
+            governance: GOVERNANCE,
             bold: boldAddress
         });
 
         DeploymentResult memory deployed =
-            _deployAndConnectContracts(troveManagerParamsArray, collNames, collSymbols, deployGovernanceParams);
-
-        // Governance
-        (address governanceAddress, string memory governanceManifest) = deployGovernance(deployGovernanceParams);
-        address computedGovernanceAddress = computeGovernanceAddress(deployGovernanceParams);
-        assert(governanceAddress == computedGovernanceAddress);
+            _deployAndConnectContracts(troveManagerParamsArray, collNames, collSymbols, deployConnectParams);
 
         vm.stopBroadcast();
 
-        vm.writeFile("deployment-manifest.json", _getManifestJson(deployed, governanceManifest));
+        vm.writeFile("deployment-manifest.json", _getManifestJson(deployed, "{}"));
 
         if (vm.envOr("OPEN_DEMO_TROVES", false)) {
             // Anvil default accounts
@@ -421,14 +404,14 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
         TroveManagerParams[] memory troveManagerParamsArray,
         string[] memory _collNames,
         string[] memory _collSymbols,
-        DeployGovernanceParams memory _deployGovernanceParams
+        DeployConnectParams memory _deployConnectParams
     ) internal returns (DeploymentResult memory r) {
         assert(_collNames.length == troveManagerParamsArray.length - 1);
         assert(_collSymbols.length == troveManagerParamsArray.length - 1);
 
         DeploymentVars memory vars;
         vars.numCollaterals = troveManagerParamsArray.length;
-        r.boldToken = BoldToken(_deployGovernanceParams.bold);
+        r.boldToken = BoldToken(_deployConnectParams.bold);
 
         r.contractsArray = new LiquityContracts[](vars.numCollaterals);
         vars.collaterals = new IERC20Metadata[](vars.numCollaterals);
@@ -481,7 +464,7 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
                 address(vars.troveManagers[vars.i]),
                 r.hintHelpers,
                 r.multiTroveGetter,
-                computeGovernanceAddress(_deployGovernanceParams),
+                _deployConnectParams.governance,
                 vars.stockMarketHoursWord,
                 vars.holidayWords
             );
