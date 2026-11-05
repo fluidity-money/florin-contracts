@@ -74,10 +74,6 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
     // Gas compensation token, separate from SPY collateral
     IWETH WETH;
 
-    address internal lqty;
-    address internal stakingV1;
-    address internal lusd;
-
     bytes32 SALT;
     address deployer;
     bool useTestnetPriceFeeds;
@@ -190,14 +186,8 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
         if (block.chainid == ROBINHOOD_TESTNET_CHAIN && !deploymentMode.eq(DEPLOYMENT_MODE_BOLD_ONLY)) {
             SPY_ADDRESS = vm.envAddress("SPY_ADDRESS");
             WETH_ADDRESS = ROBINHOOD_TESTNET_WETH;
-            lqty = vm.envAddress("LQTY_ADDRESS");
-            stakingV1 = vm.envAddress("LQTY_STAKING_ADDRESS");
-            lusd = vm.envAddress("LUSD_ADDRESS");
             require(SPY_ADDRESS.code.length > 0, "Testnet SPY has no code");
             require(WETH_ADDRESS.code.length > 0, "Testnet WETH has no code");
-            require(lqty.code.length > 0, "Testnet LQTY has no code");
-            require(stakingV1.code.length > 0, "Testnet staking has no code");
-            require(lusd.code.length > 0, "Testnet LUSD has no code");
             require(useTestnetPriceFeeds, "Testnet deployment requires USE_TESTNET_PRICEFEEDS=true");
             require(!vm.envOr("OPEN_DEMO_TROVES", false), "Demo troves require faucet collateral and funded WETH");
             SPY = ISPYToken(SPY_ADDRESS);
