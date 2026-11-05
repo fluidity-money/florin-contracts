@@ -5,8 +5,6 @@ import "./TestContracts/DevTestSetup.sol";
 import "./TestContracts/ChainlinkOracleMock.sol";
 import "src/PriceFeeds/SPYPriceFeed.sol";
 
-// Only the stock's pause signal is mocked, not ERC20 transfers. A pause in the
-// oracle's stock-market policy must not prevent risk-reducing collateral moves.
 contract OperationsStockPauseSignal {
     bool public paused;
 
@@ -15,9 +13,6 @@ contract OperationsStockPauseSignal {
     }
 }
 
-// Existing local deployment hard-wires PriceFeedTestnet. Etch this stateless
-// bridge at that address, preserving every protocol contract's wiring while
-// routing BOTH pause APIs and price APIs to an actual SPYPriceFeed instance.
 contract OperationsFeedBridge {
     SPYPriceFeed public immutable feed;
 
@@ -127,6 +122,32 @@ abstract contract StockPauseOperationsSetup is DevTestSetup {
 }
 
 contract StockPauseOperationsTest is StockPauseOperationsSetup {
+    function test_openTroveRevertsWhenStockTokenPaused() public {
+        stock.setPaused(true);
+        vm.prank(C);
+        vm.expectRevert(BorrowerOperations.StockPaused.selector);
+        _open(false);
+        assertEq(troveManager.getTroveIdsCount(), 2);
+    }
+
+    function test_withdrawCollRevertsWhenStockTokenPaused() public {
+        stock.setPaused(true);
+        uint256 collateral = troveManager.getTroveColl(aId);
+        vm.prank(A);
+        vm.expectRevert(BorrowerOperations.StockPaused.selector);
+        borrowerOperations.withdrawColl(aId, 1e18);
+        assertEq(troveManager.getTroveColl(aId), collateral);
+    }
+
+    function test_redemptionRevertsWhenStockTokenPaused() public {
+        stock.setPaused(true);
+        uint256 wallet = boldToken.balanceOf(B);
+        vm.prank(B);
+        vm.expectRevert(TroveManager.StockMarketPaused.selector);
+        collateralRegistry.redeemCollateral(100e18, 10, 1e18);
+        assertEq(boldToken.balanceOf(B), wallet);
+    }
+
     function testFuzz_openDisabledWithPositiveControl(uint8 cause, bool batch) public {
         _pause(cause);
         vm.startPrank(C);
