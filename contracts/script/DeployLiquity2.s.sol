@@ -62,28 +62,16 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
 
     uint256 constant AVAILABILITY_WORD = 0;
 
-    uint256 constant NUM_BRANCHES = 8; // SPY + Mag7
+    uint256 constant NUM_BRANCHES = 1; // SPY only
 
-    address SPY_ADDRESS = 0x117cc2133c37B721F49dE2A7a74833232B3B4C0C;
+    address constant ROBINHOOD_SPY = 0x117cc2133c37B721F49dE2A7a74833232B3B4C0C;
+    address constant ROBINHOOD_SPY_ORACLE = 0x319724394D3A0e3669269846abE664Cd621f9f6A;
+    address constant ROBINHOOD_TESTNET_SPY = 0x8823b40A23387Df76E127744FFB38b26eB012A5c;
+    address constant ROBINHOOD_TESTNET_SPY_ORACLE = 0xcc794A65915A7Ec2B4753bB9d6b983C60035cd74;
+
+    address SPY_ADDRESS;
     // Canonical Robinhood mainnet WETH: https://docs.robinhood.com/chain/contracts/
     address WETH_ADDRESS = 0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73;
-    address constant SPY_ORACLE_ADDRESS = 0x319724394D3A0e3669269846abE664Cd621f9f6A;
-
-    // Robinhood mainnet tokens and standard Chainlink token/USD proxies:
-    address constant AAPL_ADDRESS = 0xaF3D76f1834A1d425780943C99Ea8A608f8a93f9;
-    address constant AAPL_ORACLE_ADDRESS = 0x6B22A786bAa607d76728168703a39Ea9C99f2cD0;
-    address constant MSFT_ADDRESS = 0xe93237C50D904957Cf27E7B1133b510C669c2e74;
-    address constant MSFT_ORACLE_ADDRESS = 0x45C3C877C15E6BA2EBB19eA114Ea508d14C1Af2E;
-    address constant AMZN_ADDRESS = 0x12f190a9F9d7D37a250758b26824B97CE941bF54;
-    address constant AMZN_ORACLE_ADDRESS = 0xD5a1508ceD74c084eBf3cBe853e2C968fB2a651C;
-    address constant GOOGL_ADDRESS = 0x2e0847E8910a9732eB3fb1bb4b70a580ADAD4FE3;
-    address constant GOOGL_ORACLE_ADDRESS = 0xF6f373a037c30F0e5010d854385cA89185AE638b;
-    address constant META_ADDRESS = 0xc0D6457C16Cc70d6790Dd43521C899C87ce02f35;
-    address constant META_ORACLE_ADDRESS = 0x7C38C00C30BEe9378381E7B6135d7283356D71b1;
-    address constant NVDA_ADDRESS = 0xd0601CE157Db5bdC3162BbaC2a2C8aF5320D9EEC;
-    address constant NVDA_ORACLE_ADDRESS = 0x379EC4f7C378F34a1B47E4F3cbeBCbAC3E8E9F15;
-    address constant TSLA_ADDRESS = 0x322F0929c4625eD5bAd873c95208D54E1c003b2d;
-    address constant TSLA_ORACLE_ADDRESS = 0x4A1166a659A55625345e9515b32adECea5547C38;
 
     // Collateral of the first branch
     ISPYToken SPY;
@@ -197,10 +185,12 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
 
         useTestnetPriceFeeds = vm.envOr("USE_TESTNET_PRICEFEEDS", block.chainid == ROBINHOOD_TESTNET_CHAIN);
 
+        bool isTestnet = block.chainid == ROBINHOOD_TESTNET_CHAIN;
+        SPY_ADDRESS = isTestnet ? ROBINHOOD_TESTNET_SPY : ROBINHOOD_SPY;
+
         // Validate testnet dependencies before creating any contracts. Mainnet SPY
         // and Liquity V1 addresses must never be reused on Robinhood testnet.
         if (block.chainid == ROBINHOOD_TESTNET_CHAIN && !deploymentMode.eq(DEPLOYMENT_MODE_BOLD_ONLY)) {
-            SPY_ADDRESS = vm.envAddress("SPY_ADDRESS");
             WETH_ADDRESS = ROBINHOOD_TESTNET_WETH;
             require(SPY_ADDRESS.code.length > 0, "Testnet SPY has no code");
             require(WETH_ADDRESS.code.length > 0, "Testnet WETH has no code");
@@ -262,37 +252,6 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
             LIQUIDATION_PENALTY_REDISTRIBUTION: LIQUIDATION_PENALTY_REDISTRIBUTION_WETH
         });
 
-        // MAG7: retain the previous non-SPY risk parameters; equity risk calibration is separate.
-        troveManagerParamsArray[1] = TroveManagerParams({
-            CCR: CCR_SETH,
-            MCR: MCR_SETH,
-            SCR: SCR_SETH,
-            BCR: BCR_ALL,
-            LIQUIDATION_PENALTY_SP: LIQUIDATION_PENALTY_SP_SETH,
-            LIQUIDATION_PENALTY_REDISTRIBUTION: LIQUIDATION_PENALTY_REDISTRIBUTION_SETH
-        });
-
-        for (uint256 i = 2; i < NUM_BRANCHES; i++) {
-            troveManagerParamsArray[i] = troveManagerParamsArray[1];
-        }
-
-        string[] memory collNames = new string[](NUM_BRANCHES - 1);
-        string[] memory collSymbols = new string[](NUM_BRANCHES - 1);
-        collNames[0] = unicode"Apple • Robinhood Token";
-        collSymbols[0] = "AAPL";
-        collNames[1] = unicode"Microsoft • Robinhood Token";
-        collSymbols[1] = "MSFT";
-        collNames[2] = unicode"Amazon • Robinhood Token";
-        collSymbols[2] = "AMZN";
-        collNames[3] = unicode"Alphabet Class A • Robinhood Token";
-        collSymbols[3] = "GOOGL";
-        collNames[4] = unicode"Meta Platforms • Robinhood Token";
-        collSymbols[4] = "META";
-        collNames[5] = unicode"NVIDIA • Robinhood Token";
-        collSymbols[5] = "NVDA";
-        collNames[6] = unicode"Tesla • Robinhood Token";
-        collSymbols[6] = "TSLA";
-
         // Governance is a stand in using a proxy that executes calldata
         // its given if it's by the multisig for now:
 
@@ -310,7 +269,7 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
 
         DeploymentResult memory deployed =
             _deployAndConnectContracts(
-                troveManagerParamsArray, collNames, collSymbols, deployConnectParams,
+                troveManagerParamsArray, deployConnectParams,
                 address(governance)
             );
 
@@ -331,7 +290,7 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
             demoAccounts[6] = 0x92db14e403b83dfe3df233f83dfa3a0d7096f21ca9b0d6d6b8d88b2b4ec1564e;
             demoAccounts[7] = 0x4bbbf85ce3377467afe5d46f804f221813b2bb87f24d81f60f1fcdbf7cbf4356;
 
-            DemoTroveParams[] memory demoTroves = new DemoTroveParams[](24);
+            DemoTroveParams[] memory demoTroves = new DemoTroveParams[](8);
 
             demoTroves[0] = DemoTroveParams(0, demoAccounts[0], 0, 35 ether, 2_800 ether, 5.0e16);
             demoTroves[1] = DemoTroveParams(0, demoAccounts[1], 0, 47 ether, 2_400 ether, 4.7e16);
@@ -341,24 +300,6 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
             demoTroves[5] = DemoTroveParams(0, demoAccounts[5], 0, 58.37 ether, 4_400 ether, 4.7e16);
             demoTroves[6] = DemoTroveParams(0, demoAccounts[6], 0, 43.92 ether, 5_500 ether, 3.8e16);
             demoTroves[7] = DemoTroveParams(0, demoAccounts[7], 0, 57.2 ether, 6_000 ether, 4.3e16);
-
-            demoTroves[8] = DemoTroveParams(1, demoAccounts[0], 0, 31 ether, 2_000 ether, 3.3e16);
-            demoTroves[9] = DemoTroveParams(1, demoAccounts[1], 0, 26 ether, 2_000 ether, 4.1e16);
-            demoTroves[10] = DemoTroveParams(1, demoAccounts[2], 0, 28 ether, 2_300 ether, 3.8e16);
-            demoTroves[11] = DemoTroveParams(1, demoAccounts[3], 0, 32 ether, 2_200 ether, 4.3e16);
-            demoTroves[12] = DemoTroveParams(1, demoAccounts[4], 0, 95 ether, 12_000 ether, 7.0e16);
-            demoTroves[13] = DemoTroveParams(1, demoAccounts[5], 0, 97 ether, 4_000 ether, 4.4e16);
-            demoTroves[14] = DemoTroveParams(1, demoAccounts[6], 0, 81 ether, 11_000 ether, 3.3e16);
-            demoTroves[15] = DemoTroveParams(1, demoAccounts[7], 0, 94 ether, 12_800 ether, 4.4e16);
-
-            demoTroves[16] = DemoTroveParams(2, demoAccounts[0], 0, 45 ether, 3_000 ether, 2.4e16);
-            demoTroves[17] = DemoTroveParams(2, demoAccounts[1], 0, 35 ether, 2_100 ether, 5.0e16);
-            demoTroves[18] = DemoTroveParams(2, demoAccounts[2], 0, 67 ether, 2_200 ether, 4.5e16);
-            demoTroves[19] = DemoTroveParams(2, demoAccounts[3], 0, 32 ether, 4_900 ether, 3.2e16);
-            demoTroves[20] = DemoTroveParams(2, demoAccounts[4], 0, 82 ether, 4_500 ether, 6.9e16);
-            demoTroves[21] = DemoTroveParams(2, demoAccounts[5], 0, 74 ether, 7_300 ether, 4.1e16);
-            demoTroves[22] = DemoTroveParams(2, demoAccounts[6], 0, 54 ether, 6_900 ether, 2.9e16);
-            demoTroves[23] = DemoTroveParams(2, demoAccounts[7], 0, 65 ether, 8_100 ether, 1.5e16);
 
             for (uint256 i = 0; i < deployed.contractsArray.length; i++) {
                 tapFaucet(demoAccounts, deployed.contractsArray[i]);
@@ -435,14 +376,9 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
 
     function _deployAndConnectContracts(
         TroveManagerParams[] memory troveManagerParamsArray,
-        string[] memory _collNames,
-        string[] memory _collSymbols,
         DeployConnectParams memory _deployConnectParams,
         address _governance
     ) internal returns (DeploymentResult memory r) {
-        assert(_collNames.length == troveManagerParamsArray.length - 1);
-        assert(_collSymbols.length == troveManagerParamsArray.length - 1);
-
         DeploymentVars memory vars;
         vars.numCollaterals = troveManagerParamsArray.length;
         r.boldToken = BoldToken(_deployConnectParams.bold);
@@ -454,32 +390,8 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
 
         (vars.stockMarketHoursWord, vars.holidayWords) = packUSMarketHours2027();
 
-        // Collaterals
-        if (block.chainid == ROBINHOOD_CHAIN && !useTestnetPriceFeeds) {
-            // Same order as collNames/collSymbols, with SPY at branch zero.
-            vars.collaterals[0] = IERC20Metadata(address(SPY));
-            vars.collaterals[1] = IERC20Metadata(AAPL_ADDRESS);
-            vars.collaterals[2] = IERC20Metadata(MSFT_ADDRESS);
-            vars.collaterals[3] = IERC20Metadata(AMZN_ADDRESS);
-            vars.collaterals[4] = IERC20Metadata(GOOGL_ADDRESS);
-            vars.collaterals[5] = IERC20Metadata(META_ADDRESS);
-            vars.collaterals[6] = IERC20Metadata(NVDA_ADDRESS);
-            vars.collaterals[7] = IERC20Metadata(TSLA_ADDRESS);
-        } else {
-            // Robinhood testnet: existing SPY plus faucet-only demo branches
-            // Use SPY as collateral for the first branch
-            vars.collaterals[0] = IERC20Metadata(address(SPY));
-
-            // Deploy plain ERC20Faucets for the rest of the branches
-            for (vars.i = 1; vars.i < vars.numCollaterals; vars.i++) {
-                vars.collaterals[vars.i] = new ERC20Faucet(
-                    _collNames[vars.i - 1], //   _name
-                    _collSymbols[vars.i - 1], // _symbol
-                    100 ether, //     _tapAmount
-                    1 days //         _tapPeriod
-                );
-            }
-        }
+        // Network-selected stock tokens, independent of mock price-feed selection.
+        vars.collaterals[0] = IERC20Metadata(address(SPY));
 
         // Deploy AddressesRegistries and get TroveManager addresses
         for (vars.i = 0; vars.i < vars.numCollaterals; vars.i++) {
@@ -657,14 +569,10 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
     }
 
     function _stockOracle(address _collTokenAddress) internal view returns (address) {
-        if (_collTokenAddress == SPY_ADDRESS) return SPY_ORACLE_ADDRESS;
-        if (_collTokenAddress == AAPL_ADDRESS) return AAPL_ORACLE_ADDRESS;
-        if (_collTokenAddress == MSFT_ADDRESS) return MSFT_ORACLE_ADDRESS;
-        if (_collTokenAddress == AMZN_ADDRESS) return AMZN_ORACLE_ADDRESS;
-        if (_collTokenAddress == GOOGL_ADDRESS) return GOOGL_ORACLE_ADDRESS;
-        if (_collTokenAddress == META_ADDRESS) return META_ORACLE_ADDRESS;
-        if (_collTokenAddress == NVDA_ADDRESS) return NVDA_ORACLE_ADDRESS;
-        if (_collTokenAddress == TSLA_ADDRESS) return TSLA_ORACLE_ADDRESS;
+        bool isTestnet = block.chainid == ROBINHOOD_TESTNET_CHAIN;
+        if (_collTokenAddress == SPY_ADDRESS) {
+            return isTestnet ? ROBINHOOD_TESTNET_SPY_ORACLE : ROBINHOOD_SPY_ORACLE;
+        }
         revert("Unsupported stock collateral");
     }
 
