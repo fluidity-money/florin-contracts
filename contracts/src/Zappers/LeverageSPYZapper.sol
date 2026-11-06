@@ -1,25 +1,24 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BUSL-1
 
 pragma solidity 0.8.24;
 
-import "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
-
 import "./GasCompZapper.sol";
 import "../Dependencies/Constants.sol";
+import "./Interfaces/ILeverageZapper.sol";
 
-contract LeverageLSTZapper is GasCompZapper, ILeverageZapper {
+contract LeverageWETHZapper is GasCompZapper, ILeverageZapper {
     using SafeERC20 for IERC20;
 
     constructor(IAddressesRegistry _addressesRegistry, IFlashLoanProvider _flashLoanProvider, IExchange _exchange)
         GasCompZapper(_addressesRegistry, _flashLoanProvider, _exchange)
     {
-        // Approval of WETH and Coll to BorrowerOperations is done in parent GasCompZapper
-        // Approve Bold to exchange module (Coll is approved in parent GasCompZapper)
+        // SPY collateral and WETH gas-compensation approvals are handled by GasCompZapper.
+        // Approve BOLD to the exchange for swaps into SPY.
         boldToken.approve(address(_exchange), type(uint256).max);
     }
 
-    function openLeveragedTroveWithRawETH(OpenLeveragedTroveParams memory _params) external payable {
-        require(msg.value == ETH_GAS_COMPENSATION, "LZ: Wrong ETH");
+    function openLeveragedTroveWithSPY(OpenLeveragedTroveParams memory _params) external payable {
+        require(msg.value == ETH_GAS_COMPENSATION, "LZ: Wrong amount of ETH");
         require(
             _params.batchManager == address(0) || _params.annualInterestRate == 0,
             "LZ: Cannot choose interest if joining a batch"
@@ -32,10 +31,10 @@ contract LeverageLSTZapper is GasCompZapper, ILeverageZapper {
         InitialBalances memory initialBalances;
         _setInitialTokensAndBalances(collToken, boldToken, initialBalances);
 
-        // Convert ETH to WETH
+        // Wrap only the ETH gas compensation; collateral is the registry's SPY token.
         WETH.deposit{value: msg.value}();
 
-        // Pull own coll
+        // Pull the caller's initial SPY collateral.
         collToken.safeTransferFrom(msg.sender, address(this), _params.collAmount);
 
         // Flash loan coll
@@ -57,8 +56,8 @@ contract LeverageLSTZapper is GasCompZapper, ILeverageZapper {
         uint256 totalCollAmount = _params.collAmount + _effectiveFlashLoanAmount;
         // We compute boldAmount off-chain for efficiency
 
-        // Open trove
         uint256 troveId;
+        // Open trove
         if (_params.batchManager == address(0)) {
             troveId = borrowerOperations.openTrove(
                 _params.owner,

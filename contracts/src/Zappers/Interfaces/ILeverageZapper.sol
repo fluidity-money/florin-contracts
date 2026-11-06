@@ -34,7 +34,7 @@ interface ILeverageZapper is IZapper {
         uint256 minBoldAmount;
     }
 
-    function openLeveragedTroveWithRawETH(OpenLeveragedTroveParams calldata _params) external payable;
+    function openLeveragedTroveWithSPY(OpenLeveragedTroveParams calldata _params) external payable;
 
     function leverUpTrove(LeverUpTroveParams calldata _params) external;
 
