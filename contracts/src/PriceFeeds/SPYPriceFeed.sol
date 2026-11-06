@@ -6,7 +6,7 @@ import "./RobinhoodPriceFeedBase.sol";
 
 import "../Dependencies/StockTokenInterface.sol";
 
-import {Ownable} from "openzeppelin/contracts/access/Ownable.sol";
+import {Ownable} from "src/Dependencies/Ownable.sol";
 
 // import "forge-std/console2.sol";
 

@@ -82,7 +82,11 @@ contract RedemptionHelperTest is DevTestSetup {
             addresses[i] = branch[i].addressesRegistry;
         }
 
-        redemptionHelper = new RedemptionHelper(collateralRegistry, addresses);
+        redemptionHelper = new RedemptionHelper(
+             collateralRegistry,
+             addresses,
+             address(0) // _governance
+         );
     }
 
     function findAmountToBorrow(uint256 branchIdx, uint256 targetDebt, uint256 interestRate)

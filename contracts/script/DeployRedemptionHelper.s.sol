@@ -25,7 +25,7 @@ contract DeployRedemptionHelper is Script, UseDeployment {
 
         vm.startBroadcast();
         RedemptionHelper redemptionHelper =
-            new RedemptionHelper({_collateralRegistry: collateralRegistry, _addresses: addresses});
+            new RedemptionHelper({_collateralRegistry: collateralRegistry, _addresses: addresses, _governance: address(governance)});
 
         console.log("redemptionHelper:", address(redemptionHelper));
     }

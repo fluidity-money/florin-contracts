@@ -149,7 +149,7 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
     struct DeploymentResult {
         LiquityContracts[] contractsArray;
         ICollateralRegistry collateralRegistry;
-        IBoldToken boldToken;
+        BoldToken boldToken;
         HintHelpers hintHelpers;
         MultiTroveGetter multiTroveGetter;
         IDebtInFrontHelper debtInFrontHelper;
@@ -425,7 +425,9 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
 
         r.boldToken.setCollateralRegistry(address(r.collateralRegistry));
 
-        r.redemptionHelper = new RedemptionHelper(r.collateralRegistry, vars.addressesRegistries);
+        r.boldToken.transferOwnership(_governance);
+
+        r.redemptionHelper = new RedemptionHelper(r.collateralRegistry, vars.addressesRegistries, _governance);
     }
 
     function _deployAddressesRegistry(TroveManagerParams memory _troveManagerParams)
@@ -450,7 +452,7 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
 
     function _deployAndConnectCollateralContracts(
         IERC20Metadata _collToken,
-        IBoldToken _boldToken,
+        BoldToken _boldToken,
         ICollateralRegistry _collateralRegistry,
         IAddressesRegistry _addressesRegistry,
         address _troveManagerAddress,

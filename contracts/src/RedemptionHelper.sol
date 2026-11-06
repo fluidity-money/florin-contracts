@@ -13,9 +13,12 @@ import {IRedemptionHelper} from "./Interfaces/IRedemptionHelper.sol";
 import {ISortedTroves} from "./Interfaces/ISortedTroves.sol";
 import {ITroveManager} from "./Interfaces/ITroveManager.sol";
 import {LatestTroveData} from "./Types/LatestTroveData.sol";
+import {Ownable} from "src/Dependencies/Ownable.sol";
 
-contract RedemptionHelper is IRedemptionHelper {
+contract RedemptionHelper is IRedemptionHelper, Ownable {
     using SafeERC20 for IERC20;
+
+    event AddressesRegistryAdded(IAddressesRegistry addressesRegistry);
 
     struct RedemptionContext {
         IERC20 collToken;
@@ -26,7 +29,11 @@ contract RedemptionHelper is IRedemptionHelper {
     IBoldToken public immutable boldToken;
     IAddressesRegistry[] public addresses; // only used off-chain, so we don't care about storage cost
 
-    constructor(ICollateralRegistry _collateralRegistry, IAddressesRegistry[] memory _addresses) {
+    constructor(
+        ICollateralRegistry _collateralRegistry,
+        IAddressesRegistry[] memory _addresses,
+        address _governance
+    ) Ownable(_governance) {
         require(_addresses.length == _collateralRegistry.totalCollaterals(), "Wrong number of registries");
         collateralRegistry = _collateralRegistry;
         boldToken = _collateralRegistry.boldToken();
@@ -39,6 +46,12 @@ contract RedemptionHelper is IRedemptionHelper {
 
     function numBranches() public view returns (uint256) {
         return collateralRegistry.totalCollaterals();
+    }
+
+    function addAddressesRegistry(IAddressesRegistry _addressesRegistry) external onlyOwner {
+        require(address(0) != address(_addressesRegistry), "Invalid AddressesRegistry");
+        addresses.push(_addressesRegistry);
+        emit AddressesRegistryAdded(_addressesRegistry);
     }
 
     // Meant to be called off-chain
