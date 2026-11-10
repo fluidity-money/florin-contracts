@@ -8,6 +8,9 @@ struct Execution {
     bytes cd;
     /// @dev This contract is ready for its upgrade! We'll change the address.
     address newImpl;
+    /// @dev Wipe out the storage from the contract when we do an upgrade,
+    /// also only running a single operation.
+    bool shouldWipe;
 }
 
 struct QueuedOperation {
@@ -34,7 +37,8 @@ library StorageSlot {
 /// executes calldata given to another location by its owner, until it's
 /// later upgraded. The current address is the team multisig. There is a one week delay
 /// to every operation that the governance takes. Note that prior to setting up
-/// with a new contract
+/// with a new contract, it might be smart to run shouldWipe, which will erase the current
+/// slots involved with the governance operations, and end the current operation.
 contract GovernanceUpgradeFlowThrough {
     uint256 public constant CURRENT_WAITTIME = 7 days;
 
@@ -46,11 +50,15 @@ contract GovernanceUpgradeFlowThrough {
     /// @notice Queue of upcoming operations this governor will run.
     QueuedOperation[] public operationQueue;
 
+    error ExecutionFailed(bytes error);
+
     event OperationQueued(bytes32 digest);
 
     event OperationExecuted(bytes32 digest);
 
     event OperationCancelled(bytes32 digest);
+
+    event StorageWiped();
 
     constructor(address _multisig) {
         ADDRESS = _multisig;
@@ -83,6 +91,14 @@ contract GovernanceUpgradeFlowThrough {
         emit OperationCancelled(expHash);
     }
 
+    function _wipeStorage() internal {
+        for (uint i = 0; i < operationQueue.length; ++i) {
+            operationQueue[i].digest = bytes32(0);
+            operationQueue[i].scheduledTs = 0;
+        }
+        operationOffset = 0;
+    }
+
     function execute(Execution[] calldata _execution) external {
         require(msg.sender == ADDRESS, "Not multisig");
         require(operationQueue.length > operationOffset, "No operations to execute");
@@ -105,7 +121,15 @@ contract GovernanceUpgradeFlowThrough {
             } else {
                 address target = _execution[i].target;
                 require(target.code.length != 0, "target has no code");
+                if (_execution[i].shouldWipe) {
+                    require(i == 0 && _execution.length == 1, "Only a single operation can wipe");
+                    _wipeStorage();
+                    emit StorageWiped();
+                }
                 (bool rc, bytes memory rd) = target.call(_execution[i].cd);
+                if (!rc) {
+                    revert ExecutionFailed(rd);
+                }
             }
         }
         emit OperationExecuted(curHash);
