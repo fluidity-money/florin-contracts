@@ -27,7 +27,6 @@ import "src/GovernanceUpgradeFlowThrough.sol";
 import "src/StabilityPool.sol";
 import {SPYPriceFeed, HolidayWord} from "src/PriceFeeds/SPYPriceFeed.sol";
 import "src/CollateralRegistry.sol";
-import "test/TestContracts/PriceFeedTestnet.sol";
 import "test/TestContracts/MetadataDeployment.sol";
 import "test/Utils/Logging.sol";
 import "test/Utils/StringEquality.sol";
@@ -35,7 +34,7 @@ import "forge-std/console2.sol";
 
 import {TransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 
-import {packUSMarketHours2027} from "./EncodeMarketHours.s.sol";
+import {packUSMarketHours2026} from "./EncodeMarketHours.s.sol";
 import {DeployGovernance} from "./DeployGovernance.s.sol";
 
 function _latestUTCMidnightBetweenWednesdayAndThursday() view returns (uint256) {
@@ -68,6 +67,8 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
     address constant ROBINHOOD_SPY_ORACLE = 0x319724394D3A0e3669269846abE664Cd621f9f6A;
     address constant ROBINHOOD_TESTNET_SPY = 0x8823b40A23387Df76E127744FFB38b26eB012A5c;
     address constant ROBINHOOD_TESTNET_SPY_ORACLE = 0xcc794A65915A7Ec2B4753bB9d6b983C60035cd74;
+    // Testnet placeholder only: this price aggregator does not report sequencer health.
+    address constant ROBINHOOD_TESTNET_SEQUENCER_UPTIME_FEED = 0xcc794A65915A7Ec2B4753bB9d6b983C60035cd74;
 
     address SPY_ADDRESS;
     // Canonical Robinhood mainnet WETH: https://docs.robinhood.com/chain/contracts/
@@ -80,7 +81,6 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
 
     bytes32 SALT;
     address deployer;
-    bool useTestnetPriceFeeds;
 
     struct LiquityContracts {
         IAddressesRegistry addressesRegistry;
@@ -183,8 +183,6 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
             string.concat("Bad deployment mode: ", deploymentMode)
         );
 
-        useTestnetPriceFeeds = vm.envOr("USE_TESTNET_PRICEFEEDS", block.chainid == ROBINHOOD_TESTNET_CHAIN);
-
         bool isTestnet = block.chainid == ROBINHOOD_TESTNET_CHAIN;
         SPY_ADDRESS = isTestnet ? ROBINHOOD_TESTNET_SPY : ROBINHOOD_SPY;
 
@@ -194,7 +192,6 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
             WETH_ADDRESS = ROBINHOOD_TESTNET_WETH;
             require(SPY_ADDRESS.code.length > 0, "Testnet SPY has no code");
             require(WETH_ADDRESS.code.length > 0, "Testnet WETH has no code");
-            require(useTestnetPriceFeeds, "Testnet deployment requires USE_TESTNET_PRICEFEEDS=true");
             require(!vm.envOr("OPEN_DEMO_TROVES", false), "Demo troves require faucet collateral and funded WETH");
             SPY = ISPYToken(SPY_ADDRESS);
             WETH = IWETH(WETH_ADDRESS);
@@ -209,7 +206,7 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
         _log("Deployer balance:       ", deployer.balance.decimal());
         _log("Deployment mode:        ", deploymentMode);
         _log("CREATE2 salt:           ", 'keccak256(bytes("', saltStr, '")) = ', uint256(SALT).toHexString());
-        _log("Use testnet PriceFeeds: ", useTestnetPriceFeeds ? "yes" : "no");
+        _log("Stock price oracle:     ", _stockOracle(SPY_ADDRESS).toHexString());
 
         // Deploy Bold or pick up existing deployment
         bytes memory boldBytecode = bytes.concat(type(BoldToken).creationCode, abi.encode(deployer));
@@ -388,9 +385,11 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
         vars.addressesRegistries = new IAddressesRegistry[](vars.numCollaterals);
         vars.troveManagers = new ITroveManager[](vars.numCollaterals);
 
-        (vars.stockMarketHoursWord, vars.holidayWords) = packUSMarketHours2027();
+        // Share the weekly schedule and 2026 holiday closures with the encoder.
+        // Holiday keys contain month/day only; refresh this calendar for subsequent years.
+        (vars.stockMarketHoursWord, vars.holidayWords) = packUSMarketHours2026();
 
-        // Network-selected stock tokens, independent of mock price-feed selection.
+        // Network-selected stock collateral.
         vars.collaterals[0] = IERC20Metadata(address(SPY));
 
         // Deploy AddressesRegistries and get TroveManager addresses
@@ -463,9 +462,14 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
         HolidayWord[] memory _holidayWords
     ) internal returns (LiquityContracts memory contracts) {
         LiquityContractAddresses memory addresses;
+        if (block.chainid == ROBINHOOD_TESTNET_CHAIN) {
+            addresses.sequencerUptimeFeed = ROBINHOOD_TESTNET_SEQUENCER_UPTIME_FEED;
+        } else if (block.chainid == ROBINHOOD_CHAIN) {
+            addresses.sequencerUptimeFeed = vm.envOr("ROBINHOOD_SEQUENCER_UPTIME_FEED", address(0));
+        }
         contracts.collToken = _collToken;
 
-        // Deploy all contracts, using testers for TM and PriceFeed
+        // Deploy branch contracts with the Chainlink-backed stock price feed
         contracts.addressesRegistry = _addressesRegistry;
 
         // Deploy Metadata
@@ -560,14 +564,7 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
         internal
         returns (IPriceFeed)
     {
-        if (block.chainid == ROBINHOOD_CHAIN && !useTestnetPriceFeeds) {
-            // SPYPriceFeed supports any Robinhood stock token. Bind both the
-            // oracle and pause checks to this branch's actual collateral.
-            return new SPYPriceFeed(_stockOracle(_collTokenAddress), _borroweOperationsAddress, _collTokenAddress, _sequencerUptimeFeed, _stockMarketHoursWord, _holidayWords, _governance);
-        }
-
-        // Explicit mock feed (default on Robinhood testnet).
-        return new PriceFeedTestnet();
+        return new SPYPriceFeed(_stockOracle(_collTokenAddress), _borroweOperationsAddress, _collTokenAddress, _sequencerUptimeFeed, _stockMarketHoursWord, _holidayWords, _governance);
     }
 
     function _stockOracle(address _collTokenAddress) internal view returns (address) {

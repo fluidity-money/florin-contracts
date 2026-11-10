@@ -83,6 +83,41 @@ function packMarketHours(MarketHours memory hours_) pure returns (uint256 weekly
     }
 }
 
+// Holiday dates and early closes: https://www.nyse.com/markets/hours-calendars
+// Retains the stock-token weekly schedule, rather than NYSE core-session hours.
+function packUSMarketHours2026() pure returns (uint256 weeklyWord, HolidayWord[] memory holidays) {
+    MarketHours memory hours_;
+
+    hours_.disableDST = false;
+
+    hours_.mondayTradingLength = 48;
+    hours_.tuesdayTradingLength = 48;
+    hours_.wednesdayTradingLength = 48;
+    hours_.thursdayTradingLength = 48;
+    hours_.fridayTradingLength = 40; // Midnight to 20:00 ET
+    hours_.sundayTradingHour = 40;  // Opens at 20:00 ET
+    hours_.sundayTradingLength = 8; // Through midnight
+
+    hours_.marketHolidays = new MarketHoliday[](12);
+
+    hours_.marketHolidays[0] = MarketHoliday(1, 1, 0, 24); // New Year's Day
+    hours_.marketHolidays[1] = MarketHoliday(1, 19, 0, 24); // Martin Luther King Jr. Day
+    hours_.marketHolidays[2] = MarketHoliday(2, 16, 0, 24); // Washington's Birthday
+    hours_.marketHolidays[3] = MarketHoliday(4, 3, 0, 24); // Good Friday
+    hours_.marketHolidays[4] = MarketHoliday(5, 25, 0, 24); // Memorial Day
+    hours_.marketHolidays[5] = MarketHoliday(6, 19, 0, 24); // Juneteenth
+    hours_.marketHolidays[6] = MarketHoliday(7, 3, 0, 24); // Independence Day observed
+    hours_.marketHolidays[7] = MarketHoliday(9, 7, 0, 24); // Labor Day
+    hours_.marketHolidays[8] = MarketHoliday(11, 26, 0, 24); // Thanksgiving
+    hours_.marketHolidays[9] = MarketHoliday(12, 25, 0, 24); // Christmas Day
+
+    // Early closes: closed from 13:00 New York time until midnight.
+    hours_.marketHolidays[10] = MarketHoliday(11, 27, 13, 11);
+    hours_.marketHolidays[11] = MarketHoliday(12, 24, 13, 11);
+
+    return packMarketHours(hours_);
+}
+
 function packUSMarketHours2027() pure returns (uint256 weeklyWord, HolidayWord[] memory holidays) {
     MarketHours memory hours_;
 
