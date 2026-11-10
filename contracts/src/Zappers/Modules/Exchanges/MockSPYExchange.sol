@@ -11,12 +11,9 @@ import {IFlashLoanProvider} from "../../Interfaces/IFlashLoanProvider.sol";
 import {IFlashLoanReceiver} from "../../Interfaces/IFlashLoanReceiver.sol";
 import {ILeverageZapper} from "../../Interfaces/ILeverageZapper.sol";
 import {IZapper} from "../../Interfaces/IZapper.sol";
-import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
-import {IUnlockCallback} from "v4-core/src/interfaces/callback/IUnlockCallback.sol";
-import {Currency} from "v4-core/src/types/Currency.sol";
 import {ReentrancyGuard} from "openzeppelin-contracts/contracts/security/ReentrancyGuard.sol";
 
-contract MockSPYExchange is IExchange, IFlashLoanProvider, IUnlockCallback, ReentrancyGuard {
+contract MockSPYExchange is IExchange, IFlashLoanProvider, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     IERC20 public immutable boldToken;
@@ -25,20 +22,11 @@ contract MockSPYExchange is IExchange, IFlashLoanProvider, IUnlockCallback, Reen
     uint256 public immutable priceScale;
     uint256 public immutable oracleScale;
 
-    IPoolManager public immutable poolManager;
     IFlashLoanReceiver public override receiver;
-    bool private _awaitingUnlock;
-    // Existing SPY reserves, adjusted for swaps during the loan, must not fund repayment.
+    // Unlent SPY reserves, adjusted for swaps during the loan, must not fund repayment.
     uint256 private _expectedReserve;
 
-    constructor(
-        IERC20Metadata _boldToken,
-        IERC20Metadata _spyToken,
-        AggregatorV3Interface _priceFeed,
-        IPoolManager _poolManager
-    ) {
-        require(address(_poolManager).code.length != 0, "MockSPYExchange: invalid PoolManager");
-        poolManager = _poolManager;
+    constructor(IERC20Metadata _boldToken, IERC20Metadata _spyToken, AggregatorV3Interface _priceFeed) {
         require(address(_boldToken) != address(_spyToken), "MockSPYExchange: identical tokens");
         require(_boldToken.decimals() == 18, "MockSPYExchange: BOLD decimals");
         uint8 collDecimals = _spyToken.decimals();
@@ -73,59 +61,47 @@ contract MockSPYExchange is IExchange, IFlashLoanProvider, IUnlockCallback, Reen
         collToken.safeTransfer(msg.sender, collAmount);
     }
 
-    /// @notice Borrow SPY via v4 flash accounting. The receiver pushes repayment back here.
-    /// @dev No flash-loan fee is charged by PoolManager; swaps retain the mock's pricing.
+    /// @notice Borrow prefunded SPY. The receiver pushes repayment back here.
+    /// @dev No flash-loan fee is charged; swaps retain the mock's pricing.
+    /// The mock needs enough reserves for both the loan and swaps during its callback.
     function makeFlashLoan(IERC20 _token, uint256 _amount, Operation _operation, bytes calldata _userData)
         external
         override
     {
         require(address(receiver) == address(0) && !_reentrancyGuardEntered(), "MockSPYExchange: loan active");
         require(address(_token) == address(collToken), "MockSPYExchange: unsupported loan token");
-        require(_amount > 0 && _amount <= uint256(uint128(type(int128).max)), "MockSPYExchange: invalid amount");
+        require(_amount > 0, "MockSPYExchange: invalid amount");
         require(msg.sender.code.length != 0, "MockSPYExchange: invalid receiver");
 
-        receiver = IFlashLoanReceiver(msg.sender);
-        _expectedReserve = collToken.balanceOf(address(this));
-        _awaitingUnlock = true;
-        poolManager.unlock(abi.encode(_amount, _operation, _userData));
-        require(!_awaitingUnlock, "MockSPYExchange: missing callback");
-        delete receiver;
-        delete _expectedReserve;
-    }
+        uint256 balance = collToken.balanceOf(address(this));
+        require(balance >= _amount, "MockSPYExchange: insufficient loan liquidity");
+        IFlashLoanReceiver loanReceiver = IFlashLoanReceiver(msg.sender);
+        receiver = loanReceiver;
+        _expectedReserve = balance - _amount;
 
-    function unlockCallback(bytes calldata _data) external override returns (bytes memory) {
-        require(msg.sender == address(poolManager) && _awaitingUnlock, "MockSPYExchange: unauthorized callback");
-        _awaitingUnlock = false;
-        (uint256 amount, Operation operation, bytes memory userData) = abi.decode(_data, (uint256, Operation, bytes));
-        IFlashLoanReceiver loanReceiver = receiver;
-        Currency currency = Currency.wrap(address(collToken));
-
-        // PoolManager records this contract's debt, but sends the SPY straight to the zapper.
-        poolManager.take(currency, address(loanReceiver), amount);
-        if (operation == Operation.OpenTrove) {
+        collToken.safeTransfer(address(loanReceiver), _amount);
+        if (_operation == Operation.OpenTrove) {
             loanReceiver.receiveFlashLoanOnOpenLeveragedTrove(
-                abi.decode(userData, (ILeverageZapper.OpenLeveragedTroveParams)), amount
+                abi.decode(_userData, (ILeverageZapper.OpenLeveragedTroveParams)), _amount
             );
-        } else if (operation == Operation.CloseTrove) {
+        } else if (_operation == Operation.CloseTrove) {
             loanReceiver.receiveFlashLoanOnCloseTroveFromCollateral(
-                abi.decode(userData, (IZapper.CloseTroveParams)), amount
+                abi.decode(_userData, (IZapper.CloseTroveParams)), _amount
             );
-        } else if (operation == Operation.LeverUpTrove) {
+        } else if (_operation == Operation.LeverUpTrove) {
             loanReceiver.receiveFlashLoanOnLeverUpTrove(
-                abi.decode(userData, (ILeverageZapper.LeverUpTroveParams)), amount
+                abi.decode(_userData, (ILeverageZapper.LeverUpTroveParams)), _amount
             );
         } else {
             loanReceiver.receiveFlashLoanOnLeverDownTrove(
-                abi.decode(userData, (ILeverageZapper.LeverDownTroveParams)), amount
+                abi.decode(_userData, (ILeverageZapper.LeverDownTroveParams)), _amount
             );
         }
 
         // Swaps are allowed during the callback, but their reserve changes are not loan repayment.
-        require(collToken.balanceOf(address(this)) >= _expectedReserve + amount, "MockSPYExchange: loan not repaid");
-        poolManager.sync(currency);
-        collToken.safeTransfer(address(poolManager), amount);
-        require(poolManager.settle() == amount, "MockSPYExchange: incomplete settlement");
-        return "";
+        require(collToken.balanceOf(address(this)) >= _expectedReserve + _amount, "MockSPYExchange: loan not repaid");
+        delete receiver;
+        delete _expectedReserve;
     }
 
     function _price() internal view returns (uint256) {

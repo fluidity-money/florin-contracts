@@ -16,25 +16,20 @@ uint256 constant ETH_GAS_COMPENSATION = 0.001 ether;
 uint256 constant MIN_LIQUIDATION_PENALTY_SP = 5e16; // 5%
 uint256 constant MAX_LIQUIDATION_PENALTY_REDISTRIBUTION = 20e16; // 20%
 
-// Collateral branch parameters (SETH = staked ETH, i.e. wstETH / rETH)
-uint256 constant CCR_WETH = 150 * _1pct;
-uint256 constant CCR_SETH = 160 * _1pct;
+// Collateral branch parameters
+uint256 constant CCR_SPY = 130 * _1pct;
 
-uint256 constant MCR_WETH = 110 * _1pct;
-uint256 constant MCR_SETH = 120 * _1pct;
+uint256 constant MCR_SPY = 110 * _1pct;
 
-uint256 constant SCR_WETH = 110 * _1pct;
-uint256 constant SCR_SETH = 120 * _1pct;
+uint256 constant SCR_SPY = 110 * _1pct;
 
 // Batch CR buffer (same for all branches for now)
 // On top of MCR to join a batch, or adjust inside a batch
 uint256 constant BCR_ALL = 10 * _1pct;
 
-uint256 constant LIQUIDATION_PENALTY_SP_WETH = 5 * _1pct;
-uint256 constant LIQUIDATION_PENALTY_SP_SETH = 5 * _1pct;
+uint256 constant LIQUIDATION_PENALTY_SP_SPY = 5 * _1pct;
 
-uint256 constant LIQUIDATION_PENALTY_REDISTRIBUTION_WETH = 10 * _1pct;
-uint256 constant LIQUIDATION_PENALTY_REDISTRIBUTION_SETH = 20 * _1pct;
+uint256 constant LIQUIDATION_PENALTY_REDISTRIBUTION_SPY = 10 * _1pct;
 
 // Fraction of collateral awarded to liquidator
 uint256 constant COLL_GAS_COMPENSATION_DIVISOR = 200; // dividing by 200 yields 0.5%

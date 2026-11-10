@@ -771,22 +771,22 @@ contract CsBold013 is TestAccounts {
 
         // WETH
         params[0] = TestDeployer.TroveManagerParams({
-            CCR: CCR_WETH,
-            MCR: MCR_WETH,
-            SCR: SCR_WETH,
+            CCR: CCR_SPY,
+            MCR: MCR_SPY,
+            SCR: SCR_SPY,
             BCR: BCR_ALL,
-            LIQUIDATION_PENALTY_SP: LIQUIDATION_PENALTY_SP_WETH,
-            LIQUIDATION_PENALTY_REDISTRIBUTION: LIQUIDATION_PENALTY_REDISTRIBUTION_WETH
+            LIQUIDATION_PENALTY_SP: LIQUIDATION_PENALTY_SP_SPY,
+            LIQUIDATION_PENALTY_REDISTRIBUTION: LIQUIDATION_PENALTY_REDISTRIBUTION_SPY
         });
 
         // wstETH
         params[1] = TestDeployer.TroveManagerParams({
-            CCR: CCR_SETH,
-            MCR: MCR_SETH,
-            SCR: SCR_SETH,
+            CCR: CCR_SPY,
+            MCR: MCR_SPY,
+            SCR: SCR_SPY,
             BCR: BCR_ALL,
-            LIQUIDATION_PENALTY_SP: LIQUIDATION_PENALTY_SP_SETH,
-            LIQUIDATION_PENALTY_REDISTRIBUTION: LIQUIDATION_PENALTY_REDISTRIBUTION_SETH
+            LIQUIDATION_PENALTY_SP: LIQUIDATION_PENALTY_SP_SPY,
+            LIQUIDATION_PENALTY_REDISTRIBUTION: LIQUIDATION_PENALTY_REDISTRIBUTION_SPY
         });
 
         // rETH (same as wstETH)
@@ -869,18 +869,18 @@ contract CsBold013 is TestAccounts {
     function test_WontRedeemMoreThanTotalUnbacked_UnlessTotalUnbackedIsZero() external {
         // ETH branch setup
         {
-            openTroveWithExactICRAndDebt(0, A, 0, CCR_WETH, 200_000 ether, MIN_ANNUAL_INTEREST_RATE);
+            openTroveWithExactICRAndDebt(0, A, 0, CCR_SPY, 200_000 ether, MIN_ANNUAL_INTEREST_RATE);
 
             vm.prank(A);
             branches[0].stabilityPool.provideToSP(100_000 ether, false);
 
-            branches[0].priceFeed.setPrice(INITIAL_PRICE * (SCR_WETH - _1pct) / CCR_WETH);
+            branches[0].priceFeed.setPrice(INITIAL_PRICE * (SCR_SPY - _1pct) / CCR_SPY);
             branches[0].borrowerOperations.shutdown();
         }
 
         // wstETH branch setup
         {
-            openTroveWithExactICRAndDebt(1, A, 0, 2 * CCR_WETH, 100_000 ether, MIN_ANNUAL_INTEREST_RATE);
+            openTroveWithExactICRAndDebt(1, A, 0, 2 * CCR_SPY, 100_000 ether, MIN_ANNUAL_INTEREST_RATE);
 
             vm.prank(A);
             branches[1].stabilityPool.provideToSP(99_000 ether, false);
@@ -888,7 +888,7 @@ contract CsBold013 is TestAccounts {
 
         // rETH branch setup
         {
-            openTroveWithExactICRAndDebt(2, A, 0, 2 * CCR_WETH, 10_000 ether, MIN_ANNUAL_INTEREST_RATE);
+            openTroveWithExactICRAndDebt(2, A, 0, 2 * CCR_SPY, 10_000 ether, MIN_ANNUAL_INTEREST_RATE);
 
             vm.prank(A);
             branches[2].stabilityPool.provideToSP(9_000 ether, false);

@@ -244,12 +244,12 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
 
         // SPY (retain existing branch risk parameters)
         troveManagerParamsArray[0] = TroveManagerParams({
-            CCR: CCR_WETH,
-            MCR: MCR_WETH,
-            SCR: SCR_WETH,
+            CCR: CCR_SPY,
+            MCR: MCR_SPY,
+            SCR: SCR_SPY,
             BCR: BCR_ALL,
-            LIQUIDATION_PENALTY_SP: LIQUIDATION_PENALTY_SP_WETH,
-            LIQUIDATION_PENALTY_REDISTRIBUTION: LIQUIDATION_PENALTY_REDISTRIBUTION_WETH
+            LIQUIDATION_PENALTY_SP: LIQUIDATION_PENALTY_SP_SPY,
+            LIQUIDATION_PENALTY_REDISTRIBUTION: LIQUIDATION_PENALTY_REDISTRIBUTION_SPY
         });
 
         // Governance is a stand in using a proxy that executes calldata
