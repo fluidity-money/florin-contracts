@@ -42,7 +42,7 @@ library StorageSlot {
 contract GovernanceUpgradeFlowThrough {
     uint256 public constant CURRENT_WAITTIME = 7 days;
 
-    address immutable public ADDRESS;
+    address immutable public MULTISIG;
 
     /// @notice The current offset of the operation ringbuffer that we use.
     uint256 public operationOffset;
@@ -61,11 +61,11 @@ contract GovernanceUpgradeFlowThrough {
     event StorageWiped();
 
     constructor(address _multisig) {
-        ADDRESS = _multisig;
+        MULTISIG = _multisig;
     }
 
     function queue(bytes32 _hash) external {
-        require(msg.sender == ADDRESS, "not multisig");
+        require(msg.sender == MULTISIG, "not multisig");
         operationQueue.push(QueuedOperation({
             digest: _hash,
             scheduledTs: block.timestamp
@@ -84,7 +84,7 @@ contract GovernanceUpgradeFlowThrough {
     }
 
     function cancel() external {
-        require(msg.sender == ADDRESS, "Not multisig");
+        require(msg.sender == MULTISIG, "Not multisig");
         require(operationOffset < operationQueue.length, "No operations to cancel");
         bytes32 expHash = operationQueue[operationOffset].digest;
         operationOffset += 1;
@@ -92,15 +92,12 @@ contract GovernanceUpgradeFlowThrough {
     }
 
     function _wipeStorage() internal {
-        for (uint i = 0; i < operationQueue.length; ++i) {
-            operationQueue[i].digest = bytes32(0);
-            operationQueue[i].scheduledTs = 0;
-        }
+        delete operationQueue;
         operationOffset = 0;
     }
 
     function execute(Execution[] calldata _execution) external {
-        require(msg.sender == ADDRESS, "Not multisig");
+        require(msg.sender == MULTISIG, "Not multisig");
         require(operationQueue.length > operationOffset, "No operations to execute");
         bytes32 expHash = operationQueue[operationOffset].digest;
         bytes32 curHash = provideHash(_execution);
@@ -110,22 +107,22 @@ contract GovernanceUpgradeFlowThrough {
         // team can control the timing of an operation:
         uint256 scheduledTs = operationQueue[operationOffset].scheduledTs;
         require(
-            scheduledTs + CURRENT_WAITTIME > block.timestamp,
+            block.timestamp > scheduledTs + CURRENT_WAITTIME,
             "Not time to run the scheduled operation"
         );
         operationOffset += 1;
         for (uint256 i = 0; i < _execution.length; ++i) {
             address newImpl = _execution[i].newImpl;
             if (address(0) != newImpl) {
-                _setNewImpl(newImpl);
-            } else {
-                address target = _execution[i].target;
-                require(target.code.length != 0, "target has no code");
                 if (_execution[i].shouldWipe) {
                     require(i == 0 && _execution.length == 1, "Only a single operation can wipe");
                     _wipeStorage();
                     emit StorageWiped();
                 }
+                _setNewImpl(newImpl);
+            } else {
+                address target = _execution[i].target;
+                require(target.code.length != 0, "target has no code");
                 (bool rc, bytes memory rd) = target.call(_execution[i].cd);
                 if (!rc) {
                     revert ExecutionFailed(rd);
