@@ -1638,6 +1638,11 @@ contract BorrowerOperations is LiquityBase, AddRemoveManagers, IBorrowerOperatio
 
     function _requireOraclesLive(bool _allowStockPaused) internal returns (uint256) {
         OracleAnswer memory oracleAnswer = priceFeed.fetchPrice();
+
+        // This revert will happen if there's a sequencer outage:
+        if (oracleAnswer.oracleDown) {
+            revert NewOracleFailureDetected();
+        }
         if (oracleAnswer.stockPaused && !_allowStockPaused) {
             revert StockPaused();
         }
