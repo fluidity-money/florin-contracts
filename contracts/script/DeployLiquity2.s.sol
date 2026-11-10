@@ -23,7 +23,7 @@ import "src/MultiTroveGetter.sol";
 import {DebtInFrontHelper, IDebtInFrontHelper} from "src/DebtInFrontHelper.sol";
 import {RedemptionHelper, IRedemptionHelper} from "src/RedemptionHelper.sol";
 import "src/SortedTroves.sol";
-import "src/GovernanceUpgradeFlowThrough.sol";
+import {GovernanceUpgradeFlowThrough} from "src/GovernanceUpgradeFlowThrough.sol";
 import "src/StabilityPool.sol";
 import {SPYPriceFeed, HolidayWord} from "src/PriceFeeds/SPYPriceFeed.sol";
 import "src/CollateralRegistry.sol";
@@ -32,7 +32,7 @@ import "test/Utils/Logging.sol";
 import "test/Utils/StringEquality.sol";
 import "forge-std/console2.sol";
 
-import {TransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 import {packUSMarketHours2026} from "./EncodeMarketHours.s.sol";
 import {DeployGovernance} from "./DeployGovernance.s.sol";
@@ -253,9 +253,8 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
         // its given if it's by the multisig for now:
 
         GovernanceUpgradeFlowThrough governance =
-            GovernanceUpgradeFlowThrough(address(new TransparentUpgradeableProxy(
+            GovernanceUpgradeFlowThrough(address(new ERC1967Proxy(
                 address(new GovernanceUpgradeFlowThrough(MULTISIG)),
-                MULTISIG,
                 ""
             )));
 
