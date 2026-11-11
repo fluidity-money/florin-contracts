@@ -26,6 +26,7 @@ import "./ChainlinkOracleMock.sol";
 import "./MetadataDeployment.sol";
 import {WETHTester} from "./WETHTester.sol";
 import {ERC20Faucet} from "./ERC20Faucet.sol";
+import {IERC20PermitMetadata} from "src/Interfaces/IERC20PermitMetadata.sol";
 
 import "forge-std/console2.sol";
 
@@ -119,7 +120,7 @@ contract TestDeployer is MetadataDeployment {
     struct DeploymentVarsMainnet {
         OracleParams oracleParams;
         uint256 numCollaterals;
-        IERC20Metadata[] collaterals;
+        IERC20PermitMetadata[] collaterals;
         IAddressesRegistry[] addressesRegistries;
         ITroveManager[] troveManagers;
         IPriceFeed[] priceFeeds;
@@ -130,7 +131,7 @@ contract TestDeployer is MetadataDeployment {
 
     struct DeploymentParamsMainnet {
         uint256 branch;
-        IERC20Metadata collToken;
+        IERC20PermitMetadata collToken;
         IPriceFeed priceFeed;
         IBoldToken boldToken;
         ICollateralRegistry collateralRegistry;
@@ -283,7 +284,7 @@ contract TestDeployer is MetadataDeployment {
         multiTroveGetter = new MultiTroveGetter(collateralRegistry);
 
         contractsArray[0] = _deployAndConnectCollateralContractsDev(
-            _WETH,
+            IERC20PermitMetadata(address(_WETH)),
             boldToken,
             collateralRegistry,
             _WETH,
@@ -296,7 +297,7 @@ contract TestDeployer is MetadataDeployment {
         // Deploy the remaining branches with LST collateral
         for (vars.i = 1; vars.i < vars.numCollaterals; vars.i++) {
             contractsArray[vars.i] = _deployAndConnectCollateralContractsDev(
-                vars.collaterals[vars.i],
+                IERC20PermitMetadata(address(vars.collaterals[vars.i])),
                 boldToken,
                 collateralRegistry,
                 _WETH,
@@ -331,7 +332,7 @@ contract TestDeployer is MetadataDeployment {
     }
 
     function _deployAndConnectCollateralContractsDev(
-        IERC20Metadata _collToken,
+        IERC20PermitMetadata _collToken,
         IBoldToken _boldToken,
         ICollateralRegistry _collateralRegistry,
         IWETH _weth,
@@ -461,7 +462,7 @@ contract TestDeployer is MetadataDeployment {
         // Colls: WETH, WSTETH, RETH
         vars.numCollaterals = 3;
         result.contractsArray = new LiquityContracts[](vars.numCollaterals);
-        vars.collaterals = new IERC20Metadata[](vars.numCollaterals);
+        vars.collaterals = new IERC20PermitMetadata[](vars.numCollaterals);
         vars.addressesRegistries = new IAddressesRegistry[](vars.numCollaterals);
         vars.troveManagers = new ITroveManager[](vars.numCollaterals);
         address troveManagerAddress;
@@ -474,25 +475,31 @@ contract TestDeployer is MetadataDeployment {
 
         // WETH
         IWETH WETH = IWETH(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
-        vars.collaterals[0] = WETH;
+        vars.collaterals[0] = IERC20PermitMetadata(address(WETH));
         (vars.addressesRegistries[0], troveManagerAddress) =
             _deployAddressesRegistryMainnet(_troveManagerParamsArray[0]);
         vars.troveManagers[0] = ITroveManager(troveManagerAddress);
 
         // RETH
-        vars.collaterals[1] = IERC20Metadata(0xae78736Cd615f374D3085123A210448E74Fc6393);
+        vars.collaterals[1] = IERC20PermitMetadata(0xae78736Cd615f374D3085123A210448E74Fc6393);
         (vars.addressesRegistries[1], troveManagerAddress) =
             _deployAddressesRegistryMainnet(_troveManagerParamsArray[1]);
         vars.troveManagers[1] = ITroveManager(troveManagerAddress);
 
         // WSTETH
-        vars.collaterals[2] = IERC20Metadata(0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0);
+        vars.collaterals[2] = IERC20PermitMetadata(0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0);
         (vars.addressesRegistries[2], troveManagerAddress) =
             _deployAddressesRegistryMainnet(_troveManagerParamsArray[2]);
         vars.troveManagers[2] = ITroveManager(troveManagerAddress);
 
+        // We're doing a conversion here so we can subclass the collaterals from our superclass:
+        IERC20Metadata[] memory collateralRegistryCollaterals = new IERC20Metadata[](vars.collaterals.length);
+        for (uint i = 0; i < collateralRegistryCollaterals.length; ++i) {
+            collateralRegistryCollaterals[i] = IERC20Metadata(vars.collaterals[i]);
+        }
+
         // Deploy registry and register the TMs
-        result.collateralRegistry = new CollateralRegistryTester(result.boldToken, vars.collaterals, vars.troveManagers);
+        result.collateralRegistry = new CollateralRegistryTester(result.boldToken, collateralRegistryCollaterals, vars.troveManagers);
 
         result.hintHelpers = new HintHelpers(result.collateralRegistry);
         result.multiTroveGetter = new MultiTroveGetter(result.collateralRegistry);

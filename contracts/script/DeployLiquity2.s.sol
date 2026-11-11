@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.24;
 
-import {IERC20Metadata} from "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {Strings} from "openzeppelin-contracts/contracts/utils/Strings.sol";
 
 import {StringFormatting} from "test/Utils/StringFormatting.sol";
 import {ERC20Faucet} from "test/TestContracts/ERC20Faucet.sol";
 import {ETH_GAS_COMPENSATION} from "src/Dependencies/Constants.sol";
 import {IBorrowerOperations} from "src/Interfaces/IBorrowerOperations.sol";
+import {IERC20PermitMetadata} from "src/Interfaces/IERC20PermitMetadata.sol";
 import "src/Dependencies/ISPYToken.sol";
 import "src/AddressesRegistry.sol";
 import "src/ActivePool.sol";
@@ -96,7 +96,7 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
         IPriceFeed priceFeed;
         GasPool gasPool;
         IInterestRouter interestRouter;
-        IERC20Metadata collToken;
+        IERC20PermitMetadata collToken;
     }
 
     struct LiquityContractAddresses {
@@ -126,7 +126,7 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
 
     struct DeploymentVars {
         uint256 numCollaterals;
-        IERC20Metadata[] collaterals;
+        IERC20PermitMetadata[] collaterals;
         IAddressesRegistry[] addressesRegistries;
         ITroveManager[] troveManagers;
         LiquityContracts contracts;
@@ -380,7 +380,7 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
         r.boldToken = BoldToken(_deployConnectParams.bold);
 
         r.contractsArray = new LiquityContracts[](vars.numCollaterals);
-        vars.collaterals = new IERC20Metadata[](vars.numCollaterals);
+        vars.collaterals = new IERC20PermitMetadata[](vars.numCollaterals);
         vars.addressesRegistries = new IAddressesRegistry[](vars.numCollaterals);
         vars.troveManagers = new ITroveManager[](vars.numCollaterals);
 
@@ -389,7 +389,7 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
         (vars.stockMarketHoursWord, vars.holidayWords) = packUSMarketHours2026();
 
         // Network-selected stock collateral.
-        vars.collaterals[0] = IERC20Metadata(address(SPY));
+        vars.collaterals[0] = IERC20PermitMetadata(address(SPY));
 
         // Deploy AddressesRegistries and get TroveManager addresses
         for (vars.i = 0; vars.i < vars.numCollaterals; vars.i++) {
@@ -399,7 +399,13 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
             vars.troveManagers[vars.i] = ITroveManager(troveManagerAddress);
         }
 
-        r.collateralRegistry = new CollateralRegistry(r.boldToken, vars.collaterals, vars.troveManagers, _governance);
+        // We're doing a conversion here so we can subclass the collaterals from our superclass:
+        IERC20Metadata[] memory collateralRegistryCollaterals = new IERC20Metadata[](vars.collaterals.length);
+        for (uint i = 0; i < collateralRegistryCollaterals.length; ++i) {
+            collateralRegistryCollaterals[i] = IERC20Metadata(vars.collaterals[i]);
+        }
+
+        r.collateralRegistry = new CollateralRegistry(r.boldToken, collateralRegistryCollaterals, vars.troveManagers, _governance);
         r.hintHelpers = new HintHelpers(r.collateralRegistry);
         r.multiTroveGetter = new MultiTroveGetter(r.collateralRegistry);
         r.debtInFrontHelper = new DebtInFrontHelper(r.collateralRegistry, r.hintHelpers);
@@ -449,7 +455,7 @@ contract DeployLiquity2Script is DeployGovernance, MetadataDeployment, Logging {
     }
 
     function _deployAndConnectCollateralContracts(
-        IERC20Metadata _collToken,
+        IERC20PermitMetadata _collToken,
         BoldToken _boldToken,
         ICollateralRegistry _collateralRegistry,
         IAddressesRegistry _addressesRegistry,

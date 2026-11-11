@@ -7,7 +7,7 @@ import "../Dependencies/Constants.sol";
 import "./Interfaces/ILeverageZapper.sol";
 
 contract LeverageSPYZapper is GasCompZapper, ILeverageZapper {
-    using SafeERC20 for IERC20;
+    using SafeERC20 for IERC20PermitMetadata;
 
     constructor(IAddressesRegistry _addressesRegistry, IFlashLoanProvider _flashLoanProvider, IExchange _exchange)
         GasCompZapper(_addressesRegistry, _flashLoanProvider, _exchange)

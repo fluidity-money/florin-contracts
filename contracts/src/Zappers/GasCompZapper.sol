@@ -8,9 +8,9 @@ import "./BaseZapper.sol";
 import "../Dependencies/Constants.sol";
 
 contract GasCompZapper is BaseZapper {
-    using SafeERC20 for IERC20;
+    using SafeERC20 for IERC20PermitMetadata;
 
-    IERC20 public immutable collToken;
+    IERC20PermitMetadata public immutable collToken;
 
     constructor(IAddressesRegistry _addressesRegistry, IFlashLoanProvider _flashLoanProvider, IExchange _exchange)
         BaseZapper(_addressesRegistry, _flashLoanProvider, _exchange)
@@ -26,7 +26,18 @@ contract GasCompZapper is BaseZapper {
         collToken.approve(address(_exchange), type(uint256).max);
     }
 
-    function openTroveWithRawETH(OpenTroveParams calldata _params) external payable returns (uint256) {
+    function openTroveWithRawETHPermit(
+        PermitParams calldata _permit,
+        OpenTroveParams calldata _params
+    ) external payable returns (uint256) {
+        collToken.safePermit(
+            msg.sender, address(this), _permit.value, _permit.deadline,
+            _permit.v, _permit.r, _permit.s
+        );
+        return openTroveWithRawETH(_params);
+    }
+
+    function openTroveWithRawETH(OpenTroveParams calldata _params) public payable returns (uint256) {
         require(msg.value == ETH_GAS_COMPENSATION, "GCZ: Wrong ETH");
         require(
             _params.batchManager == address(0) || _params.annualInterestRate == 0,

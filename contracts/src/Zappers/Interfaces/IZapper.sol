@@ -6,6 +6,14 @@ import "./IFlashLoanProvider.sol";
 import "./IExchange.sol";
 
 interface IZapper {
+    struct PermitParams {
+        uint256 value;
+        uint256 deadline;
+        uint8 v;
+        bytes32 r;
+        bytes32 s;
+    }
+
     struct OpenTroveParams {
         address owner;
         uint256 ownerIndex;

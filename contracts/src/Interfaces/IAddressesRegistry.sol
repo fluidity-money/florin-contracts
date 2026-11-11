@@ -17,10 +17,11 @@ import {IMetadataNFT} from "../NFTMetadata/MetadataNFT.sol";
 import "./ICollateralRegistry.sol";
 import "./IInterestRouter.sol";
 import "./IPriceFeed.sol";
+import {IERC20PermitMetadata} from "./IERC20PermitMetadata.sol";
 
 interface IAddressesRegistry {
     struct AddressVars {
-        IERC20Metadata collToken;
+        IERC20PermitMetadata collToken;
         IBorrowerOperations borrowerOperations;
         ITroveManager troveManager;
         ITroveNFT troveNFT;
@@ -47,7 +48,7 @@ interface IAddressesRegistry {
     function LIQUIDATION_PENALTY_SP() external returns (uint256);
     function LIQUIDATION_PENALTY_REDISTRIBUTION() external returns (uint256);
 
-    function collToken() external view returns (IERC20Metadata);
+    function collToken() external view returns (IERC20PermitMetadata);
     function borrowerOperations() external view returns (IBorrowerOperations);
     function troveManager() external view returns (ITroveManager);
     function troveNFT() external view returns (ITroveNFT);

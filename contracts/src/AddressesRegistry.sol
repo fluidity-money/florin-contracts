@@ -7,7 +7,7 @@ import {MIN_LIQUIDATION_PENALTY_SP, MAX_LIQUIDATION_PENALTY_REDISTRIBUTION} from
 import "./Interfaces/IAddressesRegistry.sol";
 
 contract AddressesRegistry is Ownable, IAddressesRegistry {
-    IERC20Metadata public collToken;
+    IERC20PermitMetadata public collToken;
     IBorrowerOperations public borrowerOperations;
     ITroveManager public troveManager;
     ITroveNFT public troveNFT;
