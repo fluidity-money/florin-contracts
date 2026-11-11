@@ -72,7 +72,7 @@ abstract contract RobinhoodPriceFeedBase is IMainnetPriceFeed {
         return (scaledPrice, oracleIsDown);
     }
 
-    function _shutDownAndSwitchToLastGoodPriceNoReturn(address _failedOracleAddr) internal returns (uint256) {
+    function _shutDownAndSwitchToLastGoodPrice(address _failedOracleAddr) internal returns (uint256) {
         // Shut down the branch
         borrowerOperations.shutdownFromOracleFailure();
 

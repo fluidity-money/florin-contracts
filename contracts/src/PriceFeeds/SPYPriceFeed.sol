@@ -159,6 +159,13 @@ contract SPYPriceFeed is RobinhoodPriceFeedBase, Ownable {
          }
     }
 
+    function shutdown() external onlyOwner {
+        // Shut down the price feed by governance order if something has gone
+        // wrong (Chainlink maybe not reporting any more despite reporting
+        // sequencer uptime).
+        super._shutDownAndSwitchToLastGoodPrice(address(ethUsdOracle.aggregator));
+    }
+
     function fetchRedemptionPriceNoPauseCheck() public returns (uint256, bool) {
         // Use same price for redemption as all other ops in WETH branch
         return fetchPriceNoPauseCheck();
@@ -180,7 +187,7 @@ contract SPYPriceFeed is RobinhoodPriceFeedBase, Ownable {
         // return the last good ETH-USD price calculated This can only happen if
         // the sequencer is reported as having an outage. We don't do staleness
         // checking in this oracle.
-        if (ethUsdOracleDown) return (super._shutDownAndSwitchToLastGoodPriceNoReturn(address(ethUsdOracle.aggregator)), true);
+        if (ethUsdOracleDown) return (super._shutDownAndSwitchToLastGoodPrice(address(ethUsdOracle.aggregator)), true);
 
         lastGoodPrice = ethUsdPrice;
         return (ethUsdPrice, false);
