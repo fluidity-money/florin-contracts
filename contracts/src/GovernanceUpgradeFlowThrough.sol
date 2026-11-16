@@ -33,7 +33,7 @@ library StorageSlot {
     }
 }
 
-/// @notice GovernanceUpgradeFlowThrough is a "flow through" contract that
+/// @notice GovernanceUpgradeFlowThrough is a multicall contract that
 /// executes calldata given to another location by its owner, until it's
 /// later upgraded. The current address is the team multisig. There is a one week delay
 /// to every operation that the governance takes. Note that prior to setting up
