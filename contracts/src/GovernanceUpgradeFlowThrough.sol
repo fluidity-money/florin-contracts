@@ -77,10 +77,14 @@ contract GovernanceUpgradeFlowThrough {
         return keccak256(abi.encode(_execution));
     }
 
-    function _setNewImpl(address _impl) internal {
+    function _setNewImpl(address _impl, bytes memory _exec) internal {
         require(_impl.code.length > 0);
         StorageSlot.getAddressSlot(IMPLEMENTATION_SLOT).value = _impl;
         emit IERC1967.Upgraded(_impl);
+        if (_exec.length > 0) {
+            (bool rc,) = _impl.delegatecall(_exec);
+            require(rc, "delegatecall failed");
+        }
     }
 
     function cancel() external {
@@ -119,7 +123,7 @@ contract GovernanceUpgradeFlowThrough {
                     _wipeStorage();
                     emit StorageWiped();
                 }
-                _setNewImpl(newImpl);
+                _setNewImpl(newImpl, _execution[i].cd);
             } else {
                 address target = _execution[i].target;
                 require(target.code.length != 0, "target has no code");

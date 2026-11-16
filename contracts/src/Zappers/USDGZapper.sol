@@ -30,8 +30,8 @@ contract USDGZapper is BaseZapper {
         WETH.approve(address(borrowerOperations), type(uint256).max);
         // Approve coll to BorrowerOperations
         collToken.approve(address(borrowerOperations), type(uint256).max);
-        // Approve Coll to USDG exchange module module (for closeTroveFromCollateral)
-        collToken.approve(address(_spyUsdgExchange), type(uint256).max);
+	// Approve FUSD to the exchange for swaps into USDG.
+	boldToken.approve(address(_spyUsdgExchange), type(uint256).max);
     }
 
     struct OpenTroveSwapParams {
@@ -117,8 +117,12 @@ contract USDGZapper is BaseZapper {
                 borrowerOperations.openTroveAndJoinInterestBatchManager(openTroveAndJoinInterestBatchManagerParams);
         }
 
-        exchange.swapFromBold(_params.boldAmount, _params.usdgAmount);
-        usdg.safeTransfer(msg.sender, _params.usdgAmount);
+		// Forward only this swap's proceeds, leaving any pre-existing USDG untouched.
+		uint256 usdgBalanceBefore = usdg.balanceOf(address(this));
+		exchange.swapFromBold(_params.boldAmount, _params.usdgAmount);
+		uint256 usdgReceived = usdg.balanceOf(address(this)) - usdgBalanceBefore;
+		require(usdgReceived >= _params.usdgAmount, "USDGZapper: insufficient output");
+		usdg.safeTransfer(msg.sender, usdgReceived);
 
         // Set add/remove managers
         _setAddManager(troveId, _params.addManager);
